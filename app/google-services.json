@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "637923053042",
+    "project_id": "appcappucare",
+    "storage_bucket": "appcappucare.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:637923053042:android:90612b93fd6691173b6f6b",
+        "android_client_info": {
+          "package_name": "com.blorex.appcappucare"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCZoxPqiCT_yk6A50XdV2_ANAh8CBni3oE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
