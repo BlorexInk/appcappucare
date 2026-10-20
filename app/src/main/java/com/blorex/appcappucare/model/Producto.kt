@@ -19,16 +19,22 @@ enum class EstadoStock {
  *
  * @property codigo Código único de identificación del producto (ej: "JR-10ML").
  * @property nombre Nombre descriptivo del producto.
+ * @property descripcion Descripción detallada de uso y características del producto.
+ * @property valor Precio o costo monetario del producto.
  * @property cantidadDisponible Cantidad actual existente en inventario.
  * @property unidadMedida Unidad de empaque o medida (ej: "un", "caja", "frasco", "paq").
  * @property nivelMinimo Umbral mínimo recomendado antes de generar alerta de stock bajo.
  * @property estadoStock Estado actual del stock (DISPONIBLE, STOCK_BAJO, AGOTADO).
+ * @property imagenes Lista de hasta 4 referencias / URLs / nombres de imágenes asociadas.
  */
 data class Producto(
     val codigo: String,
     val nombre: String,
+    val descripcion: String = "",
+    val valor: Double = 0.0,
     val cantidadDisponible: Int,
     val unidadMedida: String,
     val nivelMinimo: Int,
-    val estadoStock: EstadoStock
+    val estadoStock: EstadoStock,
+    val imagenes: List<String> = emptyList()
 )

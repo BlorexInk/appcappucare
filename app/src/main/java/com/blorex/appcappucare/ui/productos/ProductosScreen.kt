@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,8 +24,21 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.blorex.appcappucare.model.EstadoStock
 import com.blorex.appcappucare.model.Producto
+import com.blorex.appcappucare.repository.ProductosRepository
 import com.blorex.appcappucare.viewmodel.ProductosViewModel
+import java.text.NumberFormat
+import java.util.*
 
+/**
+ * Pantalla de Gestión de Productos / Inventario CRUD.
+ *
+ * Ofrece listado completo de insumos, barra de búsqueda, botón para agregar nuevo producto
+ * con generación automática de código por nombre, campos para descripción, valor ($) e imágenes,
+ * y opciones para editar y eliminar productos.
+ *
+ * @param modifier Modificador composable de diseño.
+ * @param vm ViewModel de gestión de inventario.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProductosScreen(
@@ -132,8 +146,24 @@ fun ProductosScreen(
             productoEdicion = vm.productoEnEdicion,
             mensajeError = vm.mensajeError,
             onDismiss = { vm.cerrarFormulario() },
-            onGuardar = { codigo, nombre, cantidad, unidad, min ->
-                vm.guardarProducto(codigo, nombre, cantidad, unidad, min)
+            onGuardar = { codigo, nombre, descripcion, valor, cantidad, unidad, min, imagenes ->
+                val prod = Producto(
+                    codigo = codigo,
+                    nombre = nombre,
+                    descripcion = descripcion,
+                    valor = valor,
+                    cantidadDisponible = cantidad,
+                    unidadMedida = unidad,
+                    nivelMinimo = min,
+                    estadoStock = ProductosRepository.calcularEstadoStock(cantidad, min),
+                    imagenes = imagenes
+                )
+                if (vm.productoEnEdicion != null) {
+                    ProductosRepository.actualizarProducto(prod)
+                } else {
+                    ProductosRepository.agregarProducto(prod)
+                }
+                vm.cerrarFormulario()
             }
         )
     }
@@ -162,12 +192,17 @@ fun ProductosScreen(
     }
 }
 
+/** Tarjeta individual de inventario. */
 @Composable
 fun ProductoCard(
     producto: Producto,
     onEditar: () -> Unit,
     onEliminar: () -> Unit
 ) {
+    val formatoMoneda = NumberFormat.getCurrencyInstance(Locale.getDefault()).apply {
+        maximumFractionDigits = 0
+    }
+
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp)
@@ -179,33 +214,29 @@ fun ProductoCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = producto.nombre,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
                 Text(
-                    text = "Código: ${producto.codigo}  |  Unidad: ${producto.unidadMedida}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = producto.nombre,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
                 )
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Código: ${producto.codigo}  |  Precio: ${formatoMoneda.format(producto.valor)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Stock badge
                     EstadoStockBadge(estado = producto.estadoStock)
 
                     Text(
-                        text = "Stock: ${producto.cantidadDisponible} (Mín: ${producto.nivelMinimo})",
+                        text = "Stock: ${producto.cantidadDisponible} ${producto.unidadMedida} (Mín: ${producto.nivelMinimo})",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium
                     )
@@ -233,6 +264,7 @@ fun ProductoCard(
     }
 }
 
+/** Badge de estado de stock. */
 @Composable
 fun EstadoStockBadge(estado: EstadoStock) {
     val (bgColor, textColor, label) = when (estado) {
@@ -255,18 +287,22 @@ fun EstadoStockBadge(estado: EstadoStock) {
     }
 }
 
+/** Formulario para agregar / editar producto con generación automática de código e imágenes. */
 @Composable
 fun FormularioProductoDialog(
     productoEdicion: Producto?,
     mensajeError: String?,
     onDismiss: () -> Unit,
-    onGuardar: (codigo: String, nombre: String, cantidad: Int, unidad: String, min: Int) -> Unit
+    onGuardar: (codigo: String, nombre: String, descripcion: String, valor: Double, cantidad: Int, unidad: String, min: Int, imagenes: List<String>) -> Unit
 ) {
-    var codigo by remember { mutableStateOf(productoEdicion?.codigo ?: "") }
     var nombre by remember { mutableStateOf(productoEdicion?.nombre ?: "") }
-    var cantidadText by remember { mutableStateOf(productoEdicion?.cantidadDisponible?.toString() ?: "0") }
+    var codigo by remember { mutableStateOf(productoEdicion?.codigo ?: "") }
+    var descripcion by remember { mutableStateOf(productoEdicion?.descripcion ?: "") }
+    var valorText by remember { mutableStateOf(productoEdicion?.valor?.toInt()?.toString() ?: "1500") }
+    var cantidadText by remember { mutableStateOf(productoEdicion?.cantidadDisponible?.toString() ?: "20") }
     var unidadMedida by remember { mutableStateOf(productoEdicion?.unidadMedida ?: "un") }
     var nivelMinimoText by remember { mutableStateOf(productoEdicion?.nivelMinimo?.toString() ?: "10") }
+    var imagenesList by remember { mutableStateOf(productoEdicion?.imagenes ?: listOf("imagen_1.jpg")) }
 
     val esEdicion = productoEdicion != null
 
@@ -287,19 +323,46 @@ fun FormularioProductoDialog(
                     )
                 }
 
+                // Nombre
+                OutlinedTextField(
+                    value = nombre,
+                    onValueChange = { newNombre ->
+                        nombre = newNombre
+                        // Generación automática de código por el nombre si es un nuevo producto
+                        if (!esEdicion) {
+                            codigo = ProductosRepository.generarCodigoPredefinido(newNombre)
+                        }
+                    },
+                    label = { Text("Nombre del Producto") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Código (Predefinido por Nombre)
                 OutlinedTextField(
                     value = codigo,
                     onValueChange = { codigo = it },
-                    label = { Text("Código") },
+                    label = { Text("Código Predefinido (Auto)") },
                     enabled = !esEdicion,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                // Descripción
                 OutlinedTextField(
-                    value = nombre,
-                    onValueChange = { nombre = it },
-                    label = { Text("Nombre del Producto") },
+                    value = descripcion,
+                    onValueChange = { descripcion = it },
+                    label = { Text("Descripción Detallada") },
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Valor / Precio ($)
+                OutlinedTextField(
+                    value = valorText,
+                    onValueChange = { valorText = it.filter { c -> c.isDigit() } },
+                    label = { Text("Precio / Valor ($)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -308,7 +371,7 @@ fun FormularioProductoDialog(
                     OutlinedTextField(
                         value = cantidadText,
                         onValueChange = { cantidadText = it.filter { c -> c.isDigit() } },
-                        label = { Text("Stock Actual") },
+                        label = { Text("Stock") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         modifier = Modifier.weight(1f)
@@ -317,7 +380,7 @@ fun FormularioProductoDialog(
                     OutlinedTextField(
                         value = unidadMedida,
                         onValueChange = { unidadMedida = it },
-                        label = { Text("Unidad (ej: un, caja)") },
+                        label = { Text("Unidad (ej: un)") },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
@@ -326,18 +389,45 @@ fun FormularioProductoDialog(
                 OutlinedTextField(
                     value = nivelMinimoText,
                     onValueChange = { nivelMinimoText = it.filter { c -> c.isDigit() } },
-                    label = { Text("Nivel Mínimo de Stock") },
+                    label = { Text("Nivel Mínimo") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                // Imágenes asociadas
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Imágenes asociadas: ${imagenesList.size}/4",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    if (imagenesList.size < 4) {
+                        TextButton(
+                            onClick = {
+                                val nuevaNum = imagenesList.size + 1
+                                imagenesList = imagenesList + "imagen_$nuevaNum.jpg"
+                            }
+                        ) {
+                            Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Añadir foto")
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             Button(onClick = {
+                val valNum = valorText.toDoubleOrNull() ?: 0.0
                 val cant = cantidadText.toIntOrNull() ?: 0
                 val min = nivelMinimoText.toIntOrNull() ?: 0
-                onGuardar(codigo, nombre, cant, unidadMedida, min)
+                onGuardar(codigo, nombre, descripcion, valNum, cant, unidadMedida, min, imagenesList)
             }) {
                 Text(if (esEdicion) "Actualizar" else "Guardar")
             }

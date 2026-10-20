@@ -1,8 +1,8 @@
-plugins {
-    alias(libs.plugins.google.services)
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.compose)
-}
+    plugins {
+        alias(libs.plugins.google.services)
+        alias(libs.plugins.android.application)
+        alias(libs.plugins.kotlin.compose)
+    }
 
 android {
     namespace = "com.blorex.appcappucare"
@@ -62,4 +62,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation("androidx.compose.material:material-icons-extended:1.6.8")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    annotationProcessor("androidx.room:room-compiler:2.6.1")
 }

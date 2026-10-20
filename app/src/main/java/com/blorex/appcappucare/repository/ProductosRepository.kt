@@ -1,16 +1,42 @@
 package com.blorex.appcappucare.repository
 
+import android.content.Context
 import androidx.compose.runtime.mutableStateListOf
+import com.blorex.appcappucare.db.ProductosDatabaseHelper
 import com.blorex.appcappucare.model.EstadoStock
 import com.blorex.appcappucare.model.Producto
 
 /**
- * Repositorio principal de productos e inventario.
+ * Repositorio principal de productos conectado con la base de datos local SQLite/Room.
  *
- * Mantiene un estado reactivo en tiempo real ([mutableStateListOf]) con un catálogo inicial
- * de 20 insumos médicos y ofrece operaciones CRUD (Crear, Leer, Actualizar y Eliminar).
+ * Mantiene un estado reactivo en tiempo real ([mutableStateListOf]) sincronizado con la base de datos local
+ * y ofrece generación automática de códigos por nombre de producto y operaciones CRUD.
  */
 object ProductosRepository {
+
+    private var dbHelper: ProductosDatabaseHelper? = null
+    private val productos = mutableStateListOf<Producto>()
+
+    /**
+     * Inicializa la conexión con la base de datos local y carga los productos persistidos.
+     *
+     * @param context Contexto de la aplicación.
+     */
+    fun inicializarBaseDeDatos(context: Context) {
+        if (dbHelper == null) {
+            dbHelper = ProductosDatabaseHelper(context.applicationContext)
+            cargarDesdeBaseDeDatos()
+        }
+    }
+
+    /** Carga o recarga la lista de productos desde la base de datos local SQLite. */
+    private fun cargarDesdeBaseDeDatos() {
+        dbHelper?.let { helper ->
+            val lista = helper.obtenerTodos()
+            productos.clear()
+            productos.addAll(lista)
+        }
+    }
 
     /**
      * Evalúa la cantidad disponible frente al nivel mínimo para determinar el [EstadoStock].
@@ -27,35 +53,37 @@ object ProductosRepository {
         }
     }
 
-    /** Lista reactiva de 20 productos iniciales de la aplicación. */
-    private val productos = mutableStateListOf(
-        Producto("JR-10ML", "Jeringa 10ml", 45, "un", 20, EstadoStock.DISPONIBLE),
-        Producto("MK95-01", "Mascarilla KN95", 5, "un", 20, EstadoStock.STOCK_BAJO),
-        Producto("GN-NL-M", "Guantes Nitrilo M", 0, "caja", 10, EstadoStock.AGOTADO),
-        Producto("GS-EST-10", "Gasas Estériles", 100, "paq", 30, EstadoStock.DISPONIBLE),
-        Producto("ALC-70-1L", "Alcohol Etílico 70% 1L", 25, "frasco", 10, EstadoStock.DISPONIBLE),
-        Producto("OXI-PUL-01", "Oxímetro de Pulso", 12, "un", 5, EstadoStock.DISPONIBLE),
-        Producto("TERM-DIG-01", "Termómetro Digital", 18, "un", 8, EstadoStock.DISPONIBLE),
-        Producto("VEN-ELA-10", "Venda Elástica 10cm", 30, "un", 15, EstadoStock.DISPONIBLE),
-        Producto("SOL-SAL-500", "Solución Salina 0.9% 500ml", 50, "un", 20, EstadoStock.DISPONIBLE),
-        Producto("ALG-HYG-500", "Algodón Hidrófilo 500g", 15, "paq", 10, EstadoStock.DISPONIBLE),
-        Producto("CAT-IV-20G", "Catéter Intravenoso 20G", 80, "un", 25, EstadoStock.DISPONIBLE),
-        Producto("TENS-DIG-01", "Tensiómetro Digital", 8, "un", 4, EstadoStock.DISPONIBLE),
-        Producto("JAB-ANT-1L", "Jabón Antiséptico 1L", 22, "frasco", 10, EstadoStock.DISPONIBLE),
-        Producto("CINT-MIC-25", "Cinta Micropore 2.5cm", 40, "un", 15, EstadoStock.DISPONIBLE),
-        Producto("ESPAD-10", "Esparadrapo de Tela", 35, "un", 10, EstadoStock.DISPONIBLE),
-        Producto("JERING-03ML", "Jeringa 3ml con Aguja", 120, "un", 40, EstadoStock.DISPONIBLE),
-        Producto("GUA-LAT-L", "Guantes de Látex L", 3, "caja", 10, EstadoStock.STOCK_BAJO),
-        Producto("GOR-DES-100", "Gorros Desechables", 200, "un", 50, EstadoStock.DISPONIBLE),
-        Producto("ZAP-DES-100", "Cubrezapatos Desechables", 150, "un", 40, EstadoStock.DISPONIBLE),
-        Producto("SUT-NIR-30", "Hilo de Sutura Nylon 3-0", 0, "un", 12, EstadoStock.AGOTADO)
-    )
+    /**
+     * Genera automáticamente un código predefinido basado en el nombre del producto.
+     * Ejemplo: "Jeringa 10ml" -> "JER-10ML-842"
+     *
+     * @param nombre Nombre ingresado del producto.
+     * @return Código estandarizado único.
+     */
+    fun generarCodigoPredefinido(nombre: String): String {
+        val limpio = nombre.trim().uppercase().replace(Regex("[^A-Z0-9 ]"), "")
+        if (limpio.isBlank()) return "PROD-${(100..999).random()}"
+
+        val palabras = limpio.split("\\s+".toRegex()).take(3)
+        val prefijo = palabras.joinToString("-") { palabra ->
+            if (palabra.length >= 3) palabra.take(3) else palabra
+        }
+
+        val sufijoAleatorio = (100..999).random()
+        val codigoBase = "$prefijo-$sufijoAleatorio"
+
+        // Garantizar unicidad
+        if (productos.any { it.codigo.equals(codigoBase, ignoreCase = true) }) {
+            return "$prefijo-${(1000..9999).random()}"
+        }
+        return codigoBase
+    }
 
     /** Retorna la lista reactiva completa de productos. */
     fun getProductosFicticios(): List<Producto> = productos
 
     /**
-     * Agrega un nuevo producto al inventario validando que el código no exista previamente.
+     * Agrega un nuevo producto al inventario y lo persiste en la base de datos local.
      *
      * @param producto Insumo a registrar.
      * @return `true` si fue agregado exitosamente; `false` si el código ya existía.
@@ -67,12 +95,17 @@ object ProductosRepository {
         val nuevoProducto = producto.copy(
             estadoStock = calcularEstadoStock(producto.cantidadDisponible, producto.nivelMinimo)
         )
-        productos.add(nuevoProducto)
-        return true
+
+        val insertadoDb = dbHelper?.guardarOActualizar(nuevoProducto) ?: true
+        if (insertadoDb) {
+            productos.add(nuevoProducto)
+            return true
+        }
+        return false
     }
 
     /**
-     * Actualiza la información y recalcula el estado de stock de un producto existente.
+     * Actualiza la información y recalcula el estado de stock de un producto existente en la base de datos.
      *
      * @param producto Insumo con datos actualizados.
      * @return `true` si se encontró y actualizó el producto; `false` en caso contrario.
@@ -83,6 +116,7 @@ object ProductosRepository {
             val productoActualizado = producto.copy(
                 estadoStock = calcularEstadoStock(producto.cantidadDisponible, producto.nivelMinimo)
             )
+            dbHelper?.guardarOActualizar(productoActualizado)
             productos[index] = productoActualizado
             return true
         }
@@ -90,12 +124,16 @@ object ProductosRepository {
     }
 
     /**
-     * Elimina un producto del catálogo mediante su código único.
+     * Elimina un producto del catálogo y de la base de datos local mediante su código único.
      *
      * @param codigo Código del producto a eliminar.
      * @return `true` si se eliminó correctamente; `false` de lo contrario.
      */
     fun eliminarProducto(codigo: String): Boolean {
-        return productos.removeIf { it.codigo.equals(codigo, ignoreCase = true) }
+        val eliminadoDb = dbHelper?.eliminarPorCodigo(codigo) ?: true
+        if (eliminadoDb) {
+            return productos.removeIf { it.codigo.equals(codigo, ignoreCase = true) }
+        }
+        return false
     }
 }

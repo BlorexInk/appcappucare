@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Favorite
@@ -20,15 +21,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.blorex.appcappucare.model.EstadoStock
 import com.blorex.appcappucare.model.Usuario
+import com.blorex.appcappucare.repository.ProductosRepository
 import com.blorex.appcappucare.ui.auth.LoginScreen
 import com.blorex.appcappucare.ui.carrito.CarritoScreen
 import com.blorex.appcappucare.ui.catalog.CatalogoShowcaseScreen
+import com.blorex.appcappucare.ui.components.BurbujaAlertaFlotante
 import com.blorex.appcappucare.ui.dashboard.DashboardNotificacionesScreen
 import com.blorex.appcappucare.ui.favoritos.FavoritosScreen
 import com.blorex.appcappucare.ui.productos.ProductosScreen
@@ -44,6 +49,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ProductosRepository.inicializarBaseDeDatos(this)
         setContent {
             AppNavigationRoot()
         }
@@ -57,6 +63,11 @@ class MainActivity : ComponentActivity() {
 fun AppNavigationRoot(
     authViewModel: AuthViewModel = viewModel()
 ) {
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        ProductosRepository.inicializarBaseDeDatos(context)
+    }
+
     AppcappucareTheme(opcionTema = authViewModel.opcionTema) {
         Surface(modifier = Modifier.fillMaxSize()) {
             val usuario = authViewModel.usuarioLogueado
@@ -77,10 +88,10 @@ fun AppNavigationRoot(
 }
 
 /**
- * Layout principal cuando el usuario ha iniciado sesión.
+ * Layout principal de la aplicación.
  *
- * Contiene la barra superior [TopAppBar] con botón de 3 barras, el menú lateral [ModalNavigationDrawer]
- * con accesos a Perfil, Ajustes y Cerrar Sesión, y la barra inferior de pestañas [NavigationBar].
+ * Configura la pantalla inicial en el **Catálogo**, añade la opción de **Alertas** en el menú de 3 barras
+ * e integra la **Burbuja Flotante de Alertas** arrastrable con Cruz (X) de eliminación.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,12 +102,18 @@ fun MainAppLayout(
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+
+    // Pantalla inicial por defecto: Catálogo (0)
     var selectedTab by remember { mutableStateOf(0) }
 
     var mostrarPerfilDialog by remember { mutableStateOf(false) }
     var mostrarAjustesDialog by remember { mutableStateOf(false) }
+    var mostrarAlertasDesdeDrawer by remember { mutableStateOf(false) }
+    var mostrarBurbujaFlotante by remember { mutableStateOf(true) }
 
     val totalItemsEnCarrito = ventaViewModel.carrito.value.sumOf { it.cantidadVendida }
+    val todosLosProductos = ProductosRepository.getProductosFicticios()
+    val totalAlertas = todosLosProductos.count { it.estadoStock == EstadoStock.AGOTADO || it.estadoStock == EstadoStock.STOCK_BAJO }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -142,6 +159,17 @@ fun MainAppLayout(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    // Drawer Option: Alertas de Stock
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                        label = { Text("Alertas de Stock ($totalAlertas)") },
+                        selected = false,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            mostrarAlertasDesdeDrawer = true
+                        }
+                    )
+
                     NavigationDrawerItem(
                         icon = { Icon(Icons.Default.Person, contentDescription = null) },
                         label = { Text("Perfil de Usuario") },
@@ -181,86 +209,125 @@ fun MainAppLayout(
             }
         }
     ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            text = when (selectedTab) {
-                                0 -> "Notificaciones & Stock"
-                                1 -> "Catálogo de Productos"
-                                2 -> "Productos Guardados / Favoritos"
-                                3 -> "Carrito de Compras"
-                                4 -> "Inventario de Productos"
-                                else -> "AppCappuCare"
-                            },
-                            fontWeight = FontWeight.Bold
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(
-                                imageVector = Icons.Default.Menu,
-                                contentDescription = "Menú de Opciones (3 barras)"
+        Box(modifier = Modifier.fillMaxSize()) {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Text(
+                                text = when (selectedTab) {
+                                    0 -> "Catálogo de Productos"
+                                    1 -> "Productos Guardados / Favoritos"
+                                    2 -> "Carrito de Compras"
+                                    3 -> "Inventario de Productos"
+                                    else -> "AppCappuCare"
+                                },
+                                fontWeight = FontWeight.Bold
                             )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
-                    )
-                )
-            },
-            bottomBar = {
-                NavigationBar {
-                    NavigationBarItem(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        icon = { Icon(Icons.Default.Notifications, contentDescription = "Alertas") },
-                        label = { Text("Alertas") }
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        icon = { Icon(Icons.Default.Storefront, contentDescription = "Catálogo") },
-                        label = { Text("Catálogo") }
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == 2,
-                        onClick = { selectedTab = 2 },
-                        icon = { Icon(Icons.Default.Favorite, contentDescription = "Favoritos") },
-                        label = { Text("Favoritos") }
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == 3,
-                        onClick = { selectedTab = 3 },
-                        icon = {
-                            BadgedBox(
-                                badge = {
-                                    if (totalItemsEnCarrito > 0) {
-                                        Badge { Text("$totalItemsEnCarrito") }
-                                    }
-                                }
-                            ) {
-                                Icon(Icons.Default.ShoppingCart, contentDescription = "Carrito")
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(
+                                    imageVector = Icons.Default.Menu,
+                                    contentDescription = "Menú de Opciones (3 barras)"
+                                )
                             }
                         },
-                        label = { Text("Carrito") }
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
+                        )
                     )
-                    NavigationBarItem(
-                        selected = selectedTab == 4,
-                        onClick = { selectedTab = 4 },
-                        icon = { Icon(Icons.Default.Inventory, contentDescription = "Inventario") },
-                        label = { Text("Inventario") }
-                    )
+                },
+                bottomBar = {
+                    NavigationBar {
+                        NavigationBarItem(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            icon = { Icon(Icons.Default.Storefront, contentDescription = "Catálogo") },
+                            label = { Text("Catálogo") }
+                        )
+                        NavigationBarItem(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            icon = { Icon(Icons.Default.Favorite, contentDescription = "Favoritos") },
+                            label = { Text("Favoritos") }
+                        )
+                        NavigationBarItem(
+                            selected = selectedTab == 2,
+                            onClick = { selectedTab = 2 },
+                            icon = {
+                                BadgedBox(
+                                    badge = {
+                                        if (totalItemsEnCarrito > 0) {
+                                            Badge { Text("$totalItemsEnCarrito") }
+                                        }
+                                    }
+                                ) {
+                                    Icon(Icons.Default.ShoppingCart, contentDescription = "Carrito")
+                                }
+                            },
+                            label = { Text("Carrito") }
+                        )
+                        NavigationBarItem(
+                            selected = selectedTab == 3,
+                            onClick = { selectedTab = 3 },
+                            icon = { Icon(Icons.Default.Inventory, contentDescription = "Inventario") },
+                            label = { Text("Inventario") }
+                        )
+                    }
+                }
+            ) { innerPadding ->
+                when (selectedTab) {
+                    0 -> CatalogoShowcaseScreen(modifier = Modifier.padding(innerPadding), ventaViewModel = ventaViewModel)
+                    1 -> FavoritosScreen(modifier = Modifier.padding(innerPadding), ventaViewModel = ventaViewModel)
+                    2 -> CarritoScreen(modifier = Modifier.padding(innerPadding), ventaViewModel = ventaViewModel)
+                    3 -> ProductosScreen(modifier = Modifier.padding(innerPadding))
                 }
             }
-        ) { innerPadding ->
-            when (selectedTab) {
-                0 -> DashboardNotificacionesScreen(modifier = Modifier.padding(innerPadding))
-                1 -> CatalogoShowcaseScreen(modifier = Modifier.padding(innerPadding), ventaViewModel = ventaViewModel)
-                2 -> FavoritosScreen(modifier = Modifier.padding(innerPadding), ventaViewModel = ventaViewModel)
-                3 -> CarritoScreen(modifier = Modifier.padding(innerPadding), ventaViewModel = ventaViewModel)
-                4 -> ProductosScreen(modifier = Modifier.padding(innerPadding))
+
+            // Draggable Red Floating Alert Bubble Overlay
+            if (mostrarBurbujaFlotante && totalAlertas > 0) {
+                BurbujaAlertaFlotante(
+                    totalAlertas = totalAlertas,
+                    onAbrirAlertas = { mostrarAlertasDesdeDrawer = true },
+                    onDescartarBurbuja = { mostrarBurbujaFlotante = false }
+                )
+            }
+        }
+    }
+
+    // Modal dialog for Alertas desde el menú de 3 barras
+    if (mostrarAlertasDesdeDrawer) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { mostrarAlertasDesdeDrawer = false }
+        ) {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .fillMaxHeight(0.85f)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Alertas de Stock",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(onClick = { mostrarAlertasDesdeDrawer = false }) {
+                            Icon(Icons.Default.Notifications, contentDescription = "Cerrar")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    DashboardNotificacionesScreen()
+                }
             }
         }
     }
@@ -289,7 +356,7 @@ fun MainAppLayout(
         )
     }
 
-    // Modal dialog for Ajustes with Theme selection (Dark / Light / System)
+    // Modal dialog for Ajustes with Theme selection
     if (mostrarAjustesDialog) {
         AlertDialog(
             onDismissRequest = { mostrarAjustesDialog = false },
@@ -349,7 +416,7 @@ fun MainAppLayout(
                     HorizontalDivider()
 
                     Text("Versión de AppCappuCare: 1.0.0", style = MaterialTheme.typography.bodySmall)
-                    Text("Servidor de datos: Local (Sincronizado)", style = MaterialTheme.typography.bodySmall)
+                    Text("Base de datos: Room / SQLite Local", style = MaterialTheme.typography.bodySmall)
                 }
             },
             confirmButton = {
