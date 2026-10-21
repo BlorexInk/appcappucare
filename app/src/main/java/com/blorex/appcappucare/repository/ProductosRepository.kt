@@ -30,7 +30,7 @@ object ProductosRepository {
     }
 
     /** Carga o recarga la lista de productos desde la base de datos local SQLite. */
-    private fun cargarDesdeBaseDeDatos() {
+    fun cargarDesdeBaseDeDatos() {
         dbHelper?.let { helper ->
             val lista = helper.obtenerTodos()
             productos.clear()
@@ -83,7 +83,7 @@ object ProductosRepository {
     fun getProductosFicticios(): List<Producto> = productos
 
     /**
-     * Agrega un nuevo producto al inventario y lo persiste en la base de datos local.
+     * Agrega un nuevo producto al inventario y lo persiste en la base de datos local SQLite.
      *
      * @param producto Insumo a registrar.
      * @return `true` si fue agregado exitosamente; `false` si el código ya existía.
@@ -96,12 +96,19 @@ object ProductosRepository {
             estadoStock = calcularEstadoStock(producto.cantidadDisponible, producto.nivelMinimo)
         )
 
-        val insertadoDb = dbHelper?.guardarOActualizar(nuevoProducto) ?: true
-        if (insertadoDb) {
+        val helper = dbHelper
+        if (helper != null) {
+            val guardadoExitoso = helper.guardarOActualizar(nuevoProducto)
+            if (guardadoExitoso) {
+                productos.add(nuevoProducto)
+                return true
+            }
+            return false
+        } else {
+            // Si la BD aún no estaba vinculada, la agregamos al estado en memoria
             productos.add(nuevoProducto)
             return true
         }
-        return false
     }
 
     /**
@@ -116,6 +123,7 @@ object ProductosRepository {
             val productoActualizado = producto.copy(
                 estadoStock = calcularEstadoStock(producto.cantidadDisponible, producto.nivelMinimo)
             )
+
             dbHelper?.guardarOActualizar(productoActualizado)
             productos[index] = productoActualizado
             return true
@@ -130,8 +138,14 @@ object ProductosRepository {
      * @return `true` si se eliminó correctamente; `false` de lo contrario.
      */
     fun eliminarProducto(codigo: String): Boolean {
-        val eliminadoDb = dbHelper?.eliminarPorCodigo(codigo) ?: true
-        if (eliminadoDb) {
+        val helper = dbHelper
+        if (helper != null) {
+            val eliminadoDb = helper.eliminarPorCodigo(codigo)
+            if (eliminadoDb) {
+                productos.removeIf { it.codigo.equals(codigo, ignoreCase = true) }
+                return true
+            }
+        } else {
             return productos.removeIf { it.codigo.equals(codigo, ignoreCase = true) }
         }
         return false
