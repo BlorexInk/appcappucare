@@ -1,3 +1,4 @@
+
 package com.blorex.appcappucare.db
 
 import android.content.ContentValues
@@ -7,18 +8,12 @@ import android.database.sqlite.SQLiteOpenHelper
 import com.blorex.appcappucare.model.EstadoStock
 import com.blorex.appcappucare.model.Producto
 
-/**
- * Gestor de Base de Da tos Local SQLite/Room para la aplicación AppCappuCare.
- *
- * Almacena los productos y favoritos de forma persistente en el dispositivo móvil, asegurando
- * que los cambios no se pierdan al reiniciar la app.
- */
 class ProductosDatabaseHelper(context: Context) :
     SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
 
     companion object {
         private const val DATABASE_NAME = "appcappucare.db"
-        private const val DATABASE_VERSION = 2
+        private const val DATABASE_VERSION = 3
 
         private const val TABLE_PRODUCTOS = "productos"
         private const val COLUMN_CODIGO = "codigo"
@@ -30,13 +25,15 @@ class ProductosDatabaseHelper(context: Context) :
         private const val COLUMN_MINIMO = "nivelMinimo"
         private const val COLUMN_ESTADO = "estadoStock"
         private const val COLUMN_IMAGENES = "imagenes"
+        private const val COLUMN_FOTO_URI = "fotoUri"
 
         private const val TABLE_FAVORITOS = "favoritos"
         private const val COLUMN_FAV_CODIGO = "codigo"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
-        val createProductosTable = """
+        db.execSQL(
+            """
             CREATE TABLE $TABLE_PRODUCTOS (
                 $COLUMN_CODIGO TEXT PRIMARY KEY,
                 $COLUMN_NOMBRE TEXT NOT NULL,
@@ -46,32 +43,36 @@ class ProductosDatabaseHelper(context: Context) :
                 $COLUMN_UNIDAD TEXT NOT NULL,
                 $COLUMN_MINIMO INTEGER NOT NULL,
                 $COLUMN_ESTADO TEXT NOT NULL,
-                $COLUMN_IMAGENES TEXT
+                $COLUMN_IMAGENES TEXT,
+                $COLUMN_FOTO_URI TEXT
             )
-        """.trimIndent()
+            """.trimIndent()
+        )
 
-        val createFavoritosTable = """
+        db.execSQL(
+            """
             CREATE TABLE $TABLE_FAVORITOS (
                 $COLUMN_FAV_CODIGO TEXT PRIMARY KEY
             )
-        """.trimIndent()
-
-        db.execSQL(createProductosTable)
-        db.execSQL(createFavoritosTable)
+            """.trimIndent()
+        )
 
         precargarProductosIniciales(db)
         precargarFavoritosIniciales(db)
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_FAVORITOS")
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_PRODUCTOS")
-        onCreate(db)
+    override fun onUpgrade(
+        db: SQLiteDatabase,
+        oldVersion: Int,
+        newVersion: Int
+    ) {
+        if (oldVersion < 3) {
+            db.execSQL(
+                "ALTER TABLE $TABLE_PRODUCTOS ADD COLUMN $COLUMN_FOTO_URI TEXT"
+            )
+        }
     }
 
-    /**
-     * Precarga los 20 insumos médicos iniciales en la base de datos local la primera vez que se inicia la app.
-     */
     private fun precargarProductosIniciales(db: SQLiteDatabase) {
         val productosIniciales = listOf(
             Producto("JR-10ML", "Jeringa 10ml", "Jeringa desechable estéril de 10ml para inyecciones y extracción de fluidos.", 1200.0, 45, "un", 20, EstadoStock.DISPONIBLE, listOf("jeringa_1.jpg", "jeringa_2.jpg")),
@@ -96,55 +97,88 @@ class ProductosDatabaseHelper(context: Context) :
             Producto("SUT-NIR-30", "Hilo de Sutura Nylon 3-0", "Sobre con hilo de sutura monofilamento de nylon 3-0 con aguja corta.", 3500.0, 0, "un", 12, EstadoStock.AGOTADO, listOf("sutura_1.jpg"))
         )
 
-        for (p in productosIniciales) {
-            val values = ContentValues().apply {
-                put(COLUMN_CODIGO, p.codigo)
-                put(COLUMN_NOMBRE, p.nombre)
-                put(COLUMN_DESCRIPCION, p.descripcion)
-                put(COLUMN_VALOR, p.valor)
-                put(COLUMN_CANTIDAD, p.cantidadDisponible)
-                put(COLUMN_UNIDAD, p.unidadMedida)
-                put(COLUMN_MINIMO, p.nivelMinimo)
-                put(COLUMN_ESTADO, p.estadoStock.name)
-                put(COLUMN_IMAGENES, p.imagenes.joinToString(";"))
-            }
+        for (producto in productosIniciales) {
+            val values = crearValoresProducto(producto)
             db.insert(TABLE_PRODUCTOS, null, values)
         }
     }
 
-    /** Precarga los favoritos por defecto la primera vez que se inicia la app. */
     private fun precargarFavoritosIniciales(db: SQLiteDatabase) {
-        val favs = listOf("MK95-01", "TERM-DIG-01")
-        for (cod in favs) {
+        val favoritos = listOf("MK95-01", "TERM-DIG-01")
+
+        for (codigo in favoritos) {
             val values = ContentValues().apply {
-                put(COLUMN_FAV_CODIGO, cod)
+                put(COLUMN_FAV_CODIGO, codigo)
             }
-            db.insertWithOnConflict(TABLE_FAVORITOS, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+
+            db.insertWithOnConflict(
+                TABLE_FAVORITOS,
+                null,
+                values,
+                SQLiteDatabase.CONFLICT_REPLACE
+            )
         }
     }
 
-    /** Obtiene todos los productos almacenados en la base de datos local. */
     fun obtenerTodos(): List<Producto> {
-        val lista = mutableListOf<Producto>()
+        val productos = mutableListOf<Producto>()
         val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM $TABLE_PRODUCTOS", null)
 
-        if (cursor.moveToFirst()) {
-            do {
-                val codigo = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_CODIGO))
-                val nombre = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_NOMBRE))
-                val descripcion = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_DESCRIPCION)) ?: ""
-                val valor = cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_VALOR))
-                val cantidad = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_CANTIDAD))
-                val unidad = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_UNIDAD))
-                val minimo = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_MINIMO))
-                val estadoStr = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_ESTADO))
-                val imagenesStr = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_IMAGENES)) ?: ""
+        db.rawQuery("SELECT * FROM $TABLE_PRODUCTOS", null).use { cursor ->
+            while (cursor.moveToNext()) {
+                val codigo = cursor.getString(
+                    cursor.getColumnIndexOrThrow(COLUMN_CODIGO)
+                )
 
-                val estado = try { EstadoStock.valueOf(estadoStr) } catch (e: Exception) { EstadoStock.DISPONIBLE }
-                val listImagenes = if (imagenesStr.isBlank()) emptyList() else imagenesStr.split(";")
+                val nombre = cursor.getString(
+                    cursor.getColumnIndexOrThrow(COLUMN_NOMBRE)
+                )
 
-                lista.add(
+                val descripcion = cursor.getString(
+                    cursor.getColumnIndexOrThrow(COLUMN_DESCRIPCION)
+                ) ?: ""
+
+                val valor = cursor.getDouble(
+                    cursor.getColumnIndexOrThrow(COLUMN_VALOR)
+                )
+
+                val cantidad = cursor.getInt(
+                    cursor.getColumnIndexOrThrow(COLUMN_CANTIDAD)
+                )
+
+                val unidad = cursor.getString(
+                    cursor.getColumnIndexOrThrow(COLUMN_UNIDAD)
+                )
+
+                val minimo = cursor.getInt(
+                    cursor.getColumnIndexOrThrow(COLUMN_MINIMO)
+                )
+
+                val estadoTexto = cursor.getString(
+                    cursor.getColumnIndexOrThrow(COLUMN_ESTADO)
+                )
+
+                val imagenesTexto = cursor.getString(
+                    cursor.getColumnIndexOrThrow(COLUMN_IMAGENES)
+                ) ?: ""
+
+                val fotoUri = cursor.getString(
+                    cursor.getColumnIndexOrThrow(COLUMN_FOTO_URI)
+                )
+
+                val estado = try {
+                    EstadoStock.valueOf(estadoTexto)
+                } catch (e: IllegalArgumentException) {
+                    EstadoStock.DISPONIBLE
+                }
+
+                val imagenes = if (imagenesTexto.isBlank()) {
+                    emptyList()
+                } else {
+                    imagenesTexto.split(";")
+                }
+
+                productos.add(
                     Producto(
                         codigo = codigo,
                         nombre = nombre,
@@ -154,19 +188,18 @@ class ProductosDatabaseHelper(context: Context) :
                         unidadMedida = unidad,
                         nivelMinimo = minimo,
                         estadoStock = estado,
-                        imagenes = listImagenes
+                        imagenes = imagenes,
+                        fotoUri = fotoUri
                     )
                 )
-            } while (cursor.moveToNext())
+            }
         }
-        cursor.close()
-        return lista
+
+        return productos
     }
 
-    /** Inserta o actualiza un producto en la base de datos local. */
-    fun guardarOActualizar(producto: Producto): Boolean {
-        val db = writableDatabase
-        val values = ContentValues().apply {
+    private fun crearValoresProducto(producto: Producto): ContentValues {
+        return ContentValues().apply {
             put(COLUMN_CODIGO, producto.codigo)
             put(COLUMN_NOMBRE, producto.nombre)
             put(COLUMN_DESCRIPCION, producto.descripcion)
@@ -176,48 +209,82 @@ class ProductosDatabaseHelper(context: Context) :
             put(COLUMN_MINIMO, producto.nivelMinimo)
             put(COLUMN_ESTADO, producto.estadoStock.name)
             put(COLUMN_IMAGENES, producto.imagenes.joinToString(";"))
+            put(COLUMN_FOTO_URI, producto.fotoUri)
         }
-
-        val result = db.insertWithOnConflict(TABLE_PRODUCTOS, null, values, SQLiteDatabase.CONFLICT_REPLACE)
-        return result != -1L
     }
 
-    /** Elimina un producto de la base de datos local mediante su código. */
+    fun guardarOActualizar(producto: Producto): Boolean {
+        val db = writableDatabase
+        val values = crearValoresProducto(producto)
+
+        val resultado = db.insertWithOnConflict(
+            TABLE_PRODUCTOS,
+            null,
+            values,
+            SQLiteDatabase.CONFLICT_REPLACE
+        )
+
+        return resultado != -1L
+    }
+
     fun eliminarPorCodigo(codigo: String): Boolean {
         val db = writableDatabase
-        val rows = db.delete(TABLE_PRODUCTOS, "$COLUMN_CODIGO = ?", arrayOf(codigo))
-        return rows > 0
+
+        val filasEliminadas = db.delete(
+            TABLE_PRODUCTOS,
+            "$COLUMN_CODIGO = ?",
+            arrayOf(codigo)
+        )
+
+        return filasEliminadas > 0
     }
 
-    /** Obtiene los códigos de productos marcados como favoritos desde la base de datos local. */
     fun obtenerFavoritosCodigos(): List<String> {
-        val list = mutableListOf<String>()
+        val favoritos = mutableListOf<String>()
         val db = readableDatabase
-        val cursor = db.rawQuery("SELECT $COLUMN_FAV_CODIGO FROM $TABLE_FAVORITOS", null)
-        if (cursor.moveToFirst()) {
-            do {
-                val cod = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FAV_CODIGO))
-                list.add(cod)
-            } while (cursor.moveToNext())
+
+        db.rawQuery(
+            "SELECT $COLUMN_FAV_CODIGO FROM $TABLE_FAVORITOS",
+            null
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                favoritos.add(
+                    cursor.getString(
+                        cursor.getColumnIndexOrThrow(COLUMN_FAV_CODIGO)
+                    )
+                )
+            }
         }
-        cursor.close()
-        return list
+
+        return favoritos
     }
 
-    /** Agrega un producto a la lista persistente de favoritos. */
     fun agregarFavoritoCodigo(codigo: String): Boolean {
         val db = writableDatabase
+
         val values = ContentValues().apply {
             put(COLUMN_FAV_CODIGO, codigo.trim().uppercase())
         }
-        val res = db.insertWithOnConflict(TABLE_FAVORITOS, null, values, SQLiteDatabase.CONFLICT_REPLACE)
-        return res != -1L
+
+        val resultado = db.insertWithOnConflict(
+            TABLE_FAVORITOS,
+            null,
+            values,
+            SQLiteDatabase.CONFLICT_REPLACE
+        )
+
+        return resultado != -1L
     }
 
-    /** Elimina un producto de la lista persistente de favoritos. */
     fun eliminarFavoritoCodigo(codigo: String): Boolean {
         val db = writableDatabase
-        val rows = db.delete(TABLE_FAVORITOS, "$COLUMN_FAV_CODIGO = ?", arrayOf(codigo.trim().uppercase()))
-        return rows > 0
+
+        val filasEliminadas = db.delete(
+            TABLE_FAVORITOS,
+            "$COLUMN_FAV_CODIGO = ?",
+            arrayOf(codigo.trim().uppercase())
+        )
+
+        return filasEliminadas > 0
     }
 }
