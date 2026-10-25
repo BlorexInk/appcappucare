@@ -22,16 +22,25 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +52,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.blorex.appcappucare.model.EstadoStock
 import com.blorex.appcappucare.model.Producto
 import com.blorex.appcappucare.repository.ProductosRepository
+import com.blorex.appcappucare.viewmodel.CampoProducto
+import com.blorex.appcappucare.viewmodel.ProductoFormulario
 import com.blorex.appcappucare.viewmodel.ProductosViewModel
 import java.io.File
 import java.text.NumberFormat
@@ -174,44 +185,10 @@ fun ProductosScreen(
         FormularioProductoDialog(
             productoEdicion = vm.productoEnEdicion,
             mensajeError = vm.mensajeError,
-            onDismiss = {
-                vm.cerrarFormulario()
-            },
-            onGuardar = {
-                    codigo,
-                    nombre,
-                    descripcion,
-                    valor,
-                    cantidad,
-                    unidad,
-                    minimo,
-                    imagenes,
-                    fotoUri ->
-
-                val producto = Producto(
-                    codigo = codigo,
-                    nombre = nombre,
-                    descripcion = descripcion,
-                    valor = valor,
-                    cantidadDisponible = cantidad,
-                    unidadMedida = unidad,
-                    nivelMinimo = minimo,
-                    estadoStock = ProductosRepository.calcularEstadoStock(
-                        cantidad,
-                        minimo
-                    ),
-                    imagenes = imagenes,
-                    fotoUri = fotoUri
-                )
-
-                if (vm.productoEnEdicion != null) {
-                    ProductosRepository.actualizarProducto(producto)
-                } else {
-                    ProductosRepository.agregarProducto(producto)
-                }
-
-                vm.cerrarFormulario()
-            }
+            errores = vm.erroresFormulario,
+            onCampoEditado = vm::limpiarError,
+            onDismiss = { vm.cerrarFormulario() },
+            onGuardar = { formulario -> vm.guardarProducto(formulario) }
         )
     }
 
@@ -513,18 +490,10 @@ fun EstadoStockBadge(
 fun FormularioProductoDialog(
     productoEdicion: Producto?,
     mensajeError: String?,
+    errores: Map<CampoProducto, String>,
+    onCampoEditado: (CampoProducto) -> Unit,
     onDismiss: () -> Unit,
-    onGuardar: (
-        codigo: String,
-        nombre: String,
-        descripcion: String,
-        valor: Double,
-        cantidad: Int,
-        unidad: String,
-        min: Int,
-        imagenes: List<String>,
-        fotoUri: String?
-    ) -> Unit
+    onGuardar: (ProductoFormulario) -> Unit
 ) {
     val context = LocalContext.current
 
@@ -654,115 +623,93 @@ fun FormularioProductoDialog(
                     )
                 }
 
-                OutlinedTextField(
-                    value = nombre,
-                    onValueChange = { nuevoNombre ->
+                CampoProductoTexto(
+                    valor = nombre,
+                    onValor = { nuevoNombre ->
                         nombre = nuevoNombre
-
+                        onCampoEditado(CampoProducto.NOMBRE)
                         if (!esEdicion) {
-                            codigo =
-                                ProductosRepository.generarCodigoPredefinido(
-                                    nuevoNombre
-                                )
+                            codigo = ProductosRepository.generarCodigoPredefinido(nuevoNombre)
+                            onCampoEditado(CampoProducto.CODIGO)
                         }
                     },
-                    label = {
-                        Text("Nombre del Producto")
-                    },
-                    singleLine = true,
+                    etiqueta = "Nombre del Producto",
+                    icono = Icons.Default.Inventory2,
+                    error = errores[CampoProducto.NOMBRE],
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                OutlinedTextField(
-                    value = codigo,
-                    onValueChange = {
+                CampoProductoTexto(
+                    valor = codigo,
+                    onValor = {
                         codigo = it
+                        onCampoEditado(CampoProducto.CODIGO)
                     },
-                    label = {
-                        Text("Código Predefinido (Auto)")
-                    },
-                    enabled = !esEdicion,
-                    singleLine = true,
+                    etiqueta = "Código Predefinido (Auto)",
+                    icono = Icons.Default.QrCode,
+                    error = errores[CampoProducto.CODIGO],
+                    habilitado = !esEdicion,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                OutlinedTextField(
-                    value = descripcion,
-                    onValueChange = {
-                        descripcion = it
-                    },
-                    label = {
-                        Text("Descripción Detallada")
-                    },
-                    maxLines = 3,
+                CampoProductoTexto(
+                    valor = descripcion,
+                    onValor = { descripcion = it },
+                    etiqueta = "Descripción Detallada",
+                    icono = Icons.Default.Description,
+                    error = null,
+                    unaLinea = false,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                OutlinedTextField(
-                    value = valorText,
-                    onValueChange = { texto ->
-                        valorText = texto.filter {
-                            it.isDigit()
-                        }
+                CampoProductoTexto(
+                    valor = valorText,
+                    onValor = { texto ->
+                        valorText = texto.filter { it.isDigit() }
+                        onCampoEditado(CampoProducto.PRECIO)
                     },
-                    label = {
-                        Text("Precio / Valor ($)")
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number
-                    ),
-                    singleLine = true,
+                    etiqueta = "Precio / Valor ($)",
+                    icono = Icons.Default.AttachMoney,
+                    error = errores[CampoProducto.PRECIO],
+                    teclado = KeyboardType.Number,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-
-                    OutlinedTextField(
-                        value = cantidadText,
-                        onValueChange = { texto ->
-                            cantidadText = texto.filter {
-                                it.isDigit()
-                            }
-                        },
-                        label = {
-                            Text("Stock")
-                        },
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number
-                        ),
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    OutlinedTextField(
-                        value = unidadMedida,
-                        onValueChange = {
-                            unidadMedida = it
-                        },
-                        label = {
-                            Text("Unidad (ej: un)")
-                        },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                OutlinedTextField(
-                    value = nivelMinimoText,
-                    onValueChange = { texto ->
-                        nivelMinimoText = texto.filter {
-                            it.isDigit()
-                        }
+                CampoProductoTexto(
+                    valor = cantidadText,
+                    onValor = { texto ->
+                        cantidadText = texto.filter { it.isDigit() }
+                        onCampoEditado(CampoProducto.STOCK)
                     },
-                    label = {
-                        Text("Nivel Mínimo")
+                    etiqueta = "Stock",
+                    icono = Icons.Default.Layers,
+                    error = errores[CampoProducto.STOCK],
+                    teclado = KeyboardType.Number,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                CampoProductoTexto(
+                    valor = unidadMedida,
+                    onValor = {
+                        unidadMedida = it
+                        onCampoEditado(CampoProducto.UNIDAD)
                     },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number
-                    ),
-                    singleLine = true,
+                    etiqueta = "Unidad (ej: un)",
+                    icono = Icons.Default.Straighten,
+                    error = errores[CampoProducto.UNIDAD],
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                CampoProductoTexto(
+                    valor = nivelMinimoText,
+                    onValor = { texto ->
+                        nivelMinimoText = texto.filter { it.isDigit() }
+                        onCampoEditado(CampoProducto.NIVEL_MINIMO)
+                    },
+                    etiqueta = "Nivel Mínimo",
+                    icono = Icons.Default.NotificationsActive,
+                    error = errores[CampoProducto.NIVEL_MINIMO],
+                    teclado = KeyboardType.Number,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -830,35 +777,19 @@ fun FormularioProductoDialog(
 
             Button(
                 onClick = {
-
-                    val valor = valorText.toDoubleOrNull() ?: 0.0
-                    val cantidad = cantidadText.toIntOrNull() ?: 0
-                    val minimo = nivelMinimoText.toIntOrNull() ?: 0
-
-                    if (
-                        codigo.isBlank() ||
-                        nombre.isBlank() ||
-                        unidadMedida.isBlank()
-                    ) {
-                        Toast.makeText(
-                            context,
-                            "Completa nombre, código y unidad",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    } else {
-
-                        onGuardar(
-                            codigo,
-                            nombre,
-                            descripcion,
-                            valor,
-                            cantidad,
-                            unidadMedida,
-                            minimo,
-                            imagenesList,
-                            fotoUri
+                    onGuardar(
+                        ProductoFormulario(
+                            codigo = codigo,
+                            nombre = nombre,
+                            descripcion = descripcion,
+                            precio = valorText,
+                            stock = cantidadText,
+                            unidad = unidadMedida,
+                            nivelMinimo = nivelMinimoText,
+                            imagenes = imagenesList,
+                            fotoUri = fotoUri
                         )
-                    }
+                    )
                 }
             ) {
                 Text(
@@ -878,5 +809,49 @@ fun FormularioProductoDialog(
                 Text("Cancelar")
             }
         }
+    )
+}
+
+/**
+ * Campo de texto del formulario de producto con ícono, estado de error y mensaje visual.
+ * No contiene reglas de validación: solo muestra el error que entrega el ViewModel.
+ */
+@Composable
+private fun CampoProductoTexto(
+    valor: String,
+    onValor: (String) -> Unit,
+    etiqueta: String,
+    icono: ImageVector,
+    error: String?,
+    modifier: Modifier = Modifier,
+    habilitado: Boolean = true,
+    unaLinea: Boolean = true,
+    teclado: KeyboardType = KeyboardType.Text
+) {
+    OutlinedTextField(
+        value = valor,
+        onValueChange = onValor,
+        label = { Text(etiqueta) },
+        leadingIcon = { Icon(icono, contentDescription = null) },
+        trailingIcon = {
+            if (error != null) {
+                Icon(
+                    imageVector = Icons.Default.Error,
+                    contentDescription = "Campo con error",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        },
+        isError = error != null,
+        supportingText = {
+            if (error != null) {
+                Text(error)
+            }
+        },
+        enabled = habilitado,
+        singleLine = unaLinea,
+        maxLines = if (unaLinea) 1 else 3,
+        keyboardOptions = KeyboardOptions(keyboardType = teclado),
+        modifier = modifier
     )
 }

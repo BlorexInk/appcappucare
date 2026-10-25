@@ -31,8 +31,14 @@ class ProductosViewModel : ViewModel() {
     var productoAEliminar by mutableStateOf<Producto?>(null)
         private set
 
-    /** Mensaje de error de validación en el formulario. */
+    /** Mensaje de error general del formulario (por ejemplo, un fallo al guardar). */
     var mensajeError by mutableStateOf<String?>(null)
+
+    /** Errores de validación por campo del formulario de producto. */
+    var erroresFormulario by mutableStateOf<Map<CampoProducto, String>>(emptyMap())
+        private set
+
+    private val regexCodigo = Regex("^[A-Z0-9-]{2,20}$")
 
     /** Lista filtrada de productos en base al texto ingresado en [busqueda]. */
     val productos: List<Producto>
@@ -49,6 +55,7 @@ class ProductosViewModel : ViewModel() {
     fun abrirFormularioNuevo() {
         productoEnEdicion = null
         mensajeError = null
+        erroresFormulario = emptyMap()
         mostrarDialogoFormulario = true
     }
 
@@ -60,6 +67,7 @@ class ProductosViewModel : ViewModel() {
     fun abrirFormularioEditar(producto: Producto) {
         productoEnEdicion = producto
         mensajeError = null
+        erroresFormulario = emptyMap()
         mostrarDialogoFormulario = true
     }
 
@@ -67,6 +75,15 @@ class ProductosViewModel : ViewModel() {
     fun cerrarFormulario() {
         mostrarDialogoFormulario = false
         productoEnEdicion = null
+        mensajeError = null
+        erroresFormulario = emptyMap()
+    }
+
+    /** Quita el error de un campo cuando el usuario vuelve a editarlo. */
+    fun limpiarError(campo: CampoProducto) {
+        if (erroresFormulario.containsKey(campo)) {
+            erroresFormulario = erroresFormulario - campo
+        }
         mensajeError = null
     }
 
@@ -96,35 +113,86 @@ class ProductosViewModel : ViewModel() {
     }
 
     /**
-     * Valida y guarda un producto (creación o actualización) en el repositorio.
-     *
-     * @param codigo Código único.
-     * @param nombre Nombre descriptivo.
-     * @param cantidadDisponible Cantidad en stock.
-     * @param unidadMedida Unidad de medida.
-     * @param nivelMinimo Nivel mínimo de seguridad.
-     * @return `true` si el guardado fue exitoso; `false` si hubo errores de validación o código duplicado.
+     * Valida todos los campos del formulario y devuelve un mapa campo -> mensaje de error.
+     * Un mapa vacío significa que el formulario es válido.
      */
-    fun guardarProducto(
-        codigo: String,
-        nombre: String,
-        cantidadDisponible: Int,
-        unidadMedida: String,
-        nivelMinimo: Int
-    ): Boolean {
-        if (codigo.isBlank() || nombre.isBlank() || unidadMedida.isBlank()) {
-            mensajeError = "Todos los campos son obligatorios"
+    private fun validarFormulario(f: ProductoFormulario, esEdicion: Boolean): Map<CampoProducto, String> {
+        val errores = mutableMapOf<CampoProducto, String>()
+
+        val nombre = f.nombre.trim()
+        when {
+            nombre.isEmpty() -> errores[CampoProducto.NOMBRE] = "Ingresa el nombre del producto"
+            nombre.length < 3 -> errores[CampoProducto.NOMBRE] = "Debe tener al menos 3 caracteres"
+            nombre.length > 60 -> errores[CampoProducto.NOMBRE] = "Máximo 60 caracteres"
+        }
+
+        val codigo = f.codigo.trim().uppercase()
+        when {
+            codigo.isEmpty() -> errores[CampoProducto.CODIGO] = "El código es obligatorio"
+            !regexCodigo.matches(codigo) ->
+                errores[CampoProducto.CODIGO] = "Usa de 2 a 20 letras, números o guiones"
+            !esEdicion && ProductosRepository.getProductosFicticios()
+                .any { it.codigo.equals(codigo, ignoreCase = true) } ->
+                errores[CampoProducto.CODIGO] = "Ya existe un producto con este código"
+        }
+
+        val precio = f.precio.toIntOrNull()
+        when {
+            f.precio.isBlank() -> errores[CampoProducto.PRECIO] = "Ingresa el precio"
+            precio == null -> errores[CampoProducto.PRECIO] = "El valor es demasiado grande"
+            precio <= 0 -> errores[CampoProducto.PRECIO] = "El precio debe ser mayor a 0"
+        }
+
+        when {
+            f.stock.isBlank() -> errores[CampoProducto.STOCK] = "Ingresa el stock"
+            f.stock.toIntOrNull() == null -> errores[CampoProducto.STOCK] = "El valor es demasiado grande"
+        }
+
+        val unidad = f.unidad.trim()
+        when {
+            unidad.isEmpty() -> errores[CampoProducto.UNIDAD] = "Ingresa la unidad (ej: un)"
+            unidad.length > 10 -> errores[CampoProducto.UNIDAD] = "Máximo 10 caracteres"
+        }
+
+        when {
+            f.nivelMinimo.isBlank() -> errores[CampoProducto.NIVEL_MINIMO] = "Ingresa el nivel mínimo"
+            f.nivelMinimo.toIntOrNull() == null ->
+                errores[CampoProducto.NIVEL_MINIMO] = "El valor es demasiado grande"
+        }
+
+        return errores
+    }
+
+    /**
+     * Valida y guarda un producto (creación o actualización).
+     *
+     * @param formulario Datos ingresados en el formulario.
+     * @return `true` si se guardó; `false` si hubo errores de validación o falló el guardado.
+     */
+    fun guardarProducto(formulario: ProductoFormulario): Boolean {
+        val esEdicion = productoEnEdicion != null
+        val errores = validarFormulario(formulario, esEdicion)
+        erroresFormulario = errores
+        if (errores.isNotEmpty()) {
+            mensajeError = null
             return false
         }
 
-        val esEdicion = productoEnEdicion != null
+        val cantidad = formulario.stock.toInt()
+        val minimo = formulario.nivelMinimo.toInt()
+        val codigo = productoEnEdicion?.codigo ?: formulario.codigo.trim().uppercase()
+
         val producto = Producto(
-            codigo = codigo.trim().uppercase(),
-            nombre = nombre.trim(),
-            cantidadDisponible = cantidadDisponible,
-            unidadMedida = unidadMedida.trim(),
-            nivelMinimo = nivelMinimo,
-            estadoStock = ProductosRepository.calcularEstadoStock(cantidadDisponible, nivelMinimo)
+            codigo = codigo,
+            nombre = formulario.nombre.trim(),
+            descripcion = formulario.descripcion.trim(),
+            valor = formulario.precio.toDouble(),
+            cantidadDisponible = cantidad,
+            unidadMedida = formulario.unidad.trim(),
+            nivelMinimo = minimo,
+            estadoStock = ProductosRepository.calcularEstadoStock(cantidad, minimo),
+            imagenes = formulario.imagenes,
+            fotoUri = formulario.fotoUri
         )
 
         val exito = if (esEdicion) {
@@ -134,7 +202,11 @@ class ProductosViewModel : ViewModel() {
         }
 
         if (!exito) {
-            mensajeError = if (esEdicion) "No se pudo actualizar el producto" else "Ya existe un producto con el código $codigo"
+            mensajeError = if (esEdicion) {
+                "No se pudo actualizar el producto"
+            } else {
+                "No se pudo guardar el producto"
+            }
             return false
         }
 
