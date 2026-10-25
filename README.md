@@ -74,17 +74,6 @@ Todos los datos utilizados son **ficticios**, conforme a las restricciones del c
 
 ---
 
-## Alcance pendiente / mejoras futuras
-
-- Lectura de códigos **QR / códigos de barras** con la cámara (el botón existe en la pantalla de venta rápida, pero aún no está conectado).
-- Persistencia del historial de movimientos y de las ventas en la base de datos (actualmente el historial se mantiene en memoria durante la sesión).
-- Registro de movimientos de **ENTRADA** (recepción de mercadería) desde la interfaz.
-- Sincronización con Firebase Firestore (la dependencia está configurada, pero aún no se utiliza).
-- Autenticación real (hoy los usuarios son datos de demostración dentro de la app).
-- Notificaciones push del sistema para stock mínimo.
-- Integración con procesos de ventas, compras y facturación (etapa posterior, no obligatoria para el MVP).
-
-
 ##  Pasos para ejecutar
 
 ### Requisitos previos
