@@ -12,7 +12,7 @@ Prototipo funcional de aplicación móvil Android para el **control inteligente 
 
 ---
 
-## 📖 Descripción del proyecto
+## Descripción del proyecto
 
 Cappucare comercializa productos e insumos médicos y necesita mantener un control preciso de sus existencias: saber cuántas unidades hay disponibles, registrar las salidas por venta y detectar a tiempo los productos que se están agotando para reponerlos.
 
@@ -103,7 +103,7 @@ Todos los datos utilizados son **ficticios**, conforme a las restricciones del c
 3. **Esperar la sincronización de Gradle** (puede tardar unos minutos la primera vez).
 4. Verificar que el archivo `app/google-services.json` esté presente.
 5. **Crear o seleccionar un emulador** en `Tools > Device Manager` (ej: Pixel 8 Pro, API 35, Google Play).
-6. Presionar **Run ▶** (`Shift + F10`) y esperar a que la app se instale y se abra.
+6. Presionar **Run** (`Shift + F10`) y esperar a que la app se instale y se abra.
 
 ### Credenciales de demostración
 
