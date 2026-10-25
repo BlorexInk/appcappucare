@@ -6,6 +6,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Person
@@ -115,9 +117,22 @@ fun LoginScreen(
                 // Username Input
                 OutlinedTextField(
                     value = authViewModel.usernameInput,
-                    onValueChange = { authViewModel.usernameInput = it },
+                    onValueChange = authViewModel::onUsuarioChange,
                     label = { Text("Usuario") },
                     leadingIcon = { Icon(Icons.Default.Person, contentDescription = "Usuario") },
+                    trailingIcon = {
+                        if (authViewModel.errorUsuario != null || authViewModel.errorLogin != null) {
+                            Icon(
+                                imageVector = Icons.Default.Error,
+                                contentDescription = "Campo con error",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    },
+                    isError = authViewModel.errorUsuario != null || authViewModel.errorLogin != null,
+                    supportingText = {
+                        authViewModel.errorUsuario?.let { Text(it) }
+                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -129,8 +144,12 @@ fun LoginScreen(
                 // Password Input
                 OutlinedTextField(
                     value = authViewModel.passwordInput,
-                    onValueChange = { authViewModel.passwordInput = it },
+                    onValueChange = authViewModel::onPasswordChange,
                     label = { Text("Contraseña") },
+                    isError = authViewModel.errorPassword != null || authViewModel.errorLogin != null,
+                    supportingText = {
+                        authViewModel.errorPassword?.let { Text(it) }
+                    },
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = "Contraseña") },
                     trailingIcon = {
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -233,8 +252,22 @@ fun LoginScreen(
 
                     OutlinedTextField(
                         value = authViewModel.recoveryQueryInput,
-                        onValueChange = { authViewModel.recoveryQueryInput = it },
+                        onValueChange = authViewModel::onRecuperacionChange,
                         label = { Text("Usuario o Email") },
+                        leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
+                        trailingIcon = {
+                            if (authViewModel.errorRecuperacion != null) {
+                                Icon(
+                                    imageVector = Icons.Default.Error,
+                                    contentDescription = "Campo con error",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        },
+                        isError = authViewModel.errorRecuperacion != null,
+                        supportingText = {
+                            authViewModel.errorRecuperacion?.let { Text(it) }
+                        },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -242,7 +275,7 @@ fun LoginScreen(
                     authViewModel.mensajeRecuperacion?.let { msg ->
                         Text(
                             text = msg,
-                            color = if (msg.startsWith("¡")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            color = MaterialTheme.colorScheme.primary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
                         )

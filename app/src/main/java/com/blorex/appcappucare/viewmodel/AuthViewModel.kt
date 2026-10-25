@@ -23,8 +23,20 @@ class AuthViewModel : ViewModel() {
     /** Estado del campo de texto de contraseña. */
     var passwordInput by mutableStateOf("")
 
-    /** Mensaje de error de inicio de sesión. */
+    /** Mensaje de error general de inicio de sesión (credenciales incorrectas). */
     var errorLogin by mutableStateOf<String?>(null)
+
+    /** Error de validación del campo usuario. */
+    var errorUsuario by mutableStateOf<String?>(null)
+        private set
+
+    /** Error de validación del campo contraseña. */
+    var errorPassword by mutableStateOf<String?>(null)
+        private set
+
+    /** Error de validación del campo de recuperación de clave. */
+    var errorRecuperacion by mutableStateOf<String?>(null)
+        private set
 
     /** Estado de visibilidad del diálogo de recuperación de clave. */
     var mostrarDialogoRecuperar by mutableStateOf(false)
@@ -48,28 +60,63 @@ class AuthViewModel : ViewModel() {
      * @return `true` si el acceso fue exitoso; `false` si las credenciales son incorrectas.
      */
     fun iniciarSesion(): Boolean {
-        if (usernameInput.isBlank() || passwordInput.isBlank()) {
-            errorLogin = "Por favor, completa todos los campos"
+        errorLogin = null
+        errorUsuario = validarUsuario(usernameInput)
+        errorPassword = validarPassword(passwordInput)
+        if (errorUsuario != null || errorPassword != null) {
             return false
         }
 
         val usuario = AuthRepository.autenticar(usernameInput, passwordInput)
         if (usuario != null) {
             usuarioLogueado = usuario
-            errorLogin = null
             usernameInput = ""
             passwordInput = ""
             return true
-        } else {
-            errorLogin = "Usuario o contraseña incorrectos"
-            return false
         }
+        errorLogin = "Usuario o contraseña incorrectos"
+        return false
+    }
+
+    private fun validarUsuario(valor: String): String? = when {
+        valor.isBlank() -> "Ingresa tu usuario"
+        valor.trim().length < 3 -> "Debe tener al menos 3 caracteres"
+        else -> null
+    }
+
+    private fun validarPassword(valor: String): String? = when {
+        valor.isEmpty() -> "Ingresa tu contraseña"
+        valor.length < 4 -> "Debe tener al menos 4 caracteres"
+        else -> null
+    }
+
+    /** Actualiza el usuario ingresado y limpia sus errores. */
+    fun onUsuarioChange(valor: String) {
+        usernameInput = valor
+        errorUsuario = null
+        errorLogin = null
+    }
+
+    /** Actualiza la contraseña ingresada y limpia sus errores. */
+    fun onPasswordChange(valor: String) {
+        passwordInput = valor
+        errorPassword = null
+        errorLogin = null
+    }
+
+    /** Actualiza el texto de recuperación y limpia sus mensajes. */
+    fun onRecuperacionChange(valor: String) {
+        recoveryQueryInput = valor
+        errorRecuperacion = null
+        mensajeRecuperacion = null
     }
 
     /** Cierra la sesión activa y limpia los datos en memoria. */
     fun cerrarSesion() {
         usuarioLogueado = null
         errorLogin = null
+        errorUsuario = null
+        errorPassword = null
         usernameInput = ""
         passwordInput = ""
     }
@@ -78,6 +125,7 @@ class AuthViewModel : ViewModel() {
     fun abrirDialogoRecuperar() {
         recoveryQueryInput = ""
         mensajeRecuperacion = null
+        errorRecuperacion = null
         mostrarDialogoRecuperar = true
     }
 
@@ -86,20 +134,28 @@ class AuthViewModel : ViewModel() {
         mostrarDialogoRecuperar = false
         recoveryQueryInput = ""
         mensajeRecuperacion = null
+        errorRecuperacion = null
     }
 
     /** Procesa la solicitud de recuperación de contraseña para el correo o usuario ingresado. */
     fun enviarSolicitudRecuperacion() {
-        if (recoveryQueryInput.isBlank()) {
-            mensajeRecuperacion = "Ingresa tu usuario o correo electrónico"
+        mensajeRecuperacion = null
+        val consulta = recoveryQueryInput.trim()
+        if (consulta.isEmpty()) {
+            errorRecuperacion = "Ingresa tu usuario o correo electrónico"
+            return
+        }
+        if (consulta.contains("@") && !Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$").matches(consulta)) {
+            errorRecuperacion = "El correo no tiene un formato válido"
             return
         }
 
-        val usuario = AuthRepository.buscarPorUsernameOEmail(recoveryQueryInput)
+        val usuario = AuthRepository.buscarPorUsernameOEmail(consulta)
         if (usuario != null) {
-            mensajeRecuperacion = "¡Instrucciones enviadas! Se enviaron los pasos para recuperar la contraseña de '${usuario.username}' a ${usuario.email}."
+            errorRecuperacion = null
+            mensajeRecuperacion = "Se enviaron los pasos para recuperar la contraseña de '${usuario.username}' a ${usuario.email}."
         } else {
-            mensajeRecuperacion = "No se encontró ningún usuario con ese nombre o correo."
+            errorRecuperacion = "No se encontró ningún usuario con ese nombre o correo"
         }
     }
 }
