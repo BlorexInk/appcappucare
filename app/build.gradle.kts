@@ -1,16 +1,13 @@
-    plugins {
-        alias(libs.plugins.google.services)
-        alias(libs.plugins.android.application)
-        alias(libs.plugins.kotlin.compose)
-    }
+plugins {
+    alias(libs.plugins.google.services)
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
+}
 
 android {
     namespace = "com.blorex.appcappucare"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.blorex.appcappucare"
@@ -38,10 +35,7 @@ android {
     }
 }
 
-
 dependencies {
-
-
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
@@ -64,5 +58,5 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
-    annotationProcessor("androidx.room:room-compiler:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
 }

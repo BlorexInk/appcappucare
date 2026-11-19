@@ -22,13 +22,15 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.blorex.appcappucare.repository.ConfiguracionAppRepository
+import com.blorex.appcappucare.ui.components.CargarImagenProducto
 import com.blorex.appcappucare.viewmodel.AuthViewModel
 
 /**
  * Pantalla de inicio de sesión de la aplicación AppCappuCare.
  *
  * Incluye campos para usuario y contraseña, visibilidad alternable de clave,
- * botón de "Iniciar Sesión" y acceso al diálogo modal de "¿Olvidaste tu contraseña?".
+ * renderizado del logo corporativo personalizado y botón de "Iniciar Sesión".
  *
  * @param authViewModel ViewModel de autenticación.
  * @param onLoginSuccess Callback ejecutado al autenticarse correctamente.
@@ -40,6 +42,7 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
+    val logoAppUri = ConfiguracionAppRepository.logoAppUri
 
     Box(
         modifier = Modifier
@@ -60,19 +63,26 @@ fun LoginScreen(
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Header Icon
+                // Header Icon / Custom Logo
                 Surface(
                     color = MaterialTheme.colorScheme.primaryContainer,
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.size(64.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.MedicalServices,
-                            contentDescription = "Logo",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(36.dp)
-                        )
+                        if (logoAppUri.isNotBlank()) {
+                            CargarImagenProducto(
+                                uriString = logoAppUri,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.MedicalServices,
+                                contentDescription = "Logo",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
                     }
                 }
 
@@ -206,7 +216,7 @@ fun LoginScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "• blorex  |  clave: 1234 (Admin)\n• admin  |  clave: admin123 (Gerente)\n• vendedor  |  clave: pass123 (Vendedor)",
+                            text = "• blorex  |  clave: 1234 (TI / Admin)\n• admin  |  clave: admin123 (Administrador)\n• gerente  |  clave: gerente123 (Gerente)\n• vendedor  |  clave: pass123 (Vendedor)",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

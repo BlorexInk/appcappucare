@@ -9,11 +9,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Storefront
@@ -26,30 +32,46 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.blorex.appcappucare.model.EstadoStock
 import com.blorex.appcappucare.model.Usuario
+import com.blorex.appcappucare.repository.AuthRepository
+import com.blorex.appcappucare.repository.ConfiguracionAppRepository
 import com.blorex.appcappucare.repository.ProductosRepository
+import com.blorex.appcappucare.repository.SolicitudesRepository
+import com.blorex.appcappucare.repository.sync.ModoConexion
+import com.blorex.appcappucare.repository.sync.SyncBackendRepository
+import com.blorex.appcappucare.ui.admin.ModificacionAppDialog
 import com.blorex.appcappucare.ui.auth.LoginScreen
 import com.blorex.appcappucare.ui.carrito.CarritoScreen
 import com.blorex.appcappucare.ui.catalog.CatalogoShowcaseScreen
 import com.blorex.appcappucare.ui.components.BurbujaAlertaFlotante
+import com.blorex.appcappucare.ui.components.CargarImagenProducto
 import com.blorex.appcappucare.ui.dashboard.DashboardNotificacionesScreen
 import com.blorex.appcappucare.ui.favoritos.FavoritosScreen
 import com.blorex.appcappucare.ui.productos.ProductosScreen
 import com.blorex.appcappucare.ui.theme.AppcappucareTheme
 import com.blorex.appcappucare.ui.theme.OpcionTema
+import com.blorex.appcappucare.ui.usuarios.BuzonSolicitudesDialog
+import com.blorex.appcappucare.ui.usuarios.GestionUsuariosDialog
+import com.blorex.appcappucare.ui.usuarios.PerfilUsuarioDialog
+import com.blorex.appcappucare.ui.usuarios.UsuariosActivosDialog
+import com.blorex.appcappucare.ui.ventas.HistorialVentasDialog
 import com.blorex.appcappucare.viewmodel.AuthViewModel
 import com.blorex.appcappucare.viewmodel.VentaViewModel
 import kotlinx.coroutines.launch
 
 /**
- * Actividad principal de la aplicación AppCappuCare.
+ * Actividad principal de la aplicación AppCappuCare con Control de Acceso por Roles (RBAC).
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ProductosRepository.inicializarBaseDeDatos(this)
+        AuthRepository.inicializar(this)
+        SolicitudesRepository.inicializar(this)
+        ConfiguracionAppRepository.inicializar(this)
         setContent {
             AppNavigationRoot()
         }
@@ -66,6 +88,9 @@ fun AppNavigationRoot(
     val context = LocalContext.current
     LaunchedEffect(Unit) {
         ProductosRepository.inicializarBaseDeDatos(context)
+        AuthRepository.inicializar(context)
+        SolicitudesRepository.inicializar(context)
+        ConfiguracionAppRepository.inicializar(context)
     }
 
     AppcappucareTheme(opcionTema = authViewModel.opcionTema) {
@@ -88,10 +113,9 @@ fun AppNavigationRoot(
 }
 
 /**
- * Layout principal de la aplicación.
+ * Layout principal con Control de Acceso basado en Roles (RBAC).
  *
- * Configura la pantalla inicial en el **Catálogo**, añade la opción de **Alertas** en el menú de 3 barras
- * e integra la **Burbuja Flotante de Alertas** arrastrable con Cruz (X) de eliminación.
+ * Restringe funciones exclusivas para TI (`blorex`), Administradores y Vendedores.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,6 +126,11 @@ fun MainAppLayout(
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    val esTI = usuario.username.equals("blorex", ignoreCase = true) || usuario.rol.equals("TI", ignoreCase = true)
+    val esVendedor = usuario.rol.equals("Vendedor", ignoreCase = true)
+    val puedeVerReportesVentas = esTI || usuario.rol.equals("Administrador", ignoreCase = true) || usuario.rol.equals("Gerente de Tienda", ignoreCase = true)
 
     // Pantalla inicial por defecto: Catálogo (0)
     var selectedTab by remember { mutableStateOf(0) }
@@ -109,11 +138,18 @@ fun MainAppLayout(
     var mostrarPerfilDialog by remember { mutableStateOf(false) }
     var mostrarAjustesDialog by remember { mutableStateOf(false) }
     var mostrarAlertasDesdeDrawer by remember { mutableStateOf(false) }
+    var mostrarUsuariosActivos by remember { mutableStateOf(false) }
+    var mostrarGestionUsuarios by remember { mutableStateOf(false) }
+    var mostrarBuzonSolicitudes by remember { mutableStateOf(false) }
+    var mostrarHistorialVentas by remember { mutableStateOf(false) }
+    var mostrarModificacionApp by remember { mutableStateOf(false) }
     var mostrarBurbujaFlotante by remember { mutableStateOf(true) }
 
     val totalItemsEnCarrito = ventaViewModel.carrito.value.sumOf { it.cantidadVendida }
     val todosLosProductos = ProductosRepository.getProductosFicticios()
     val totalAlertas = todosLosProductos.count { it.estadoStock == EstadoStock.AGOTADO || it.estadoStock == EstadoStock.STOCK_BAJO }
+    val conteoSolicitudesPendientes = SolicitudesRepository.conteoPendientes()
+    val logoAppUri = ConfiguracionAppRepository.logoAppUri
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -130,12 +166,19 @@ fun MainAppLayout(
                         modifier = Modifier.size(56.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = usuario.username.take(2).uppercase(),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
+                            if (logoAppUri.isNotBlank()) {
+                                CargarImagenProducto(
+                                    uriString = logoAppUri,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Text(
+                                    text = usuario.username.take(2).uppercase(),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 20.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
                         }
                     }
 
@@ -148,7 +191,7 @@ fun MainAppLayout(
                     )
 
                     Text(
-                        text = "${usuario.rol} (@${usuario.username})",
+                        text = "${usuario.rol} (${usuario.categoriaCargo})",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -170,9 +213,69 @@ fun MainAppLayout(
                         }
                     )
 
+                    // Drawer Option: Historial y Reportes de Ventas
+                    if (puedeVerReportesVentas) {
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.PointOfSale, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                            label = { Text("Historial & Reportes Ventas") },
+                            selected = false,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                mostrarHistorialVentas = true
+                            }
+                        )
+                    }
+
+                    // Drawer Option: Usuarios Activos & Horarios
+                    if (puedeVerReportesVentas) {
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                            label = { Text("Usuarios Activos") },
+                            selected = false,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                mostrarUsuariosActivos = true
+                            }
+                        )
+                    }
+
+                    // Drawer Option EXCLUSIVA PARA TI (`blorex`): Gestión de Usuarios
+                    if (esTI) {
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.Group, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary) },
+                            label = { Text("Gestión de Usuarios (Solo TI)") },
+                            selected = false,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                mostrarGestionUsuarios = true
+                            }
+                        )
+
+                        // Drawer Option EXCLUSIVA PARA TI: Buzón de Solicitudes de Trabajadores
+                        NavigationDrawerItem(
+                            icon = {
+                                BadgedBox(
+                                    badge = {
+                                        if (conteoSolicitudesPendientes > 0) {
+                                            Badge { Text("$conteoSolicitudesPendientes") }
+                                        }
+                                    }
+                                ) {
+                                    Icon(Icons.Default.Inbox, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+                                }
+                            },
+                            label = { Text("Solicitudes de Trabajadores") },
+                            selected = false,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                mostrarBuzonSolicitudes = true
+                            }
+                        )
+                    }
+
                     NavigationDrawerItem(
                         icon = { Icon(Icons.Default.Person, contentDescription = null) },
-                        label = { Text("Perfil de Usuario") },
+                        label = { Text("Mi Perfil") },
                         selected = false,
                         onClick = {
                             scope.launch { drawerState.close() }
@@ -219,7 +322,7 @@ fun MainAppLayout(
                                     0 -> "Catálogo de Productos"
                                     1 -> "Productos Guardados / Favoritos"
                                     2 -> "Carrito de Compras"
-                                    3 -> "Inventario de Productos"
+                                    3 -> if (esVendedor) "AppCappuCare" else "Inventario de Productos"
                                     else -> "AppCappuCare"
                                 },
                                 fontWeight = FontWeight.Bold
@@ -268,20 +371,24 @@ fun MainAppLayout(
                             },
                             label = { Text("Carrito") }
                         )
-                        NavigationBarItem(
-                            selected = selectedTab == 3,
-                            onClick = { selectedTab = 3 },
-                            icon = { Icon(Icons.Default.Inventory, contentDescription = "Inventario") },
-                            label = { Text("Inventario") }
-                        )
+
+                        // Pestaña Inventario visible SOLO para TI, Admin y Gerente (Oculta para Vendedor)
+                        if (!esVendedor) {
+                            NavigationBarItem(
+                                selected = selectedTab == 3,
+                                onClick = { selectedTab = 3 },
+                                icon = { Icon(Icons.Default.Inventory, contentDescription = "Inventario") },
+                                label = { Text("Inventario") }
+                            )
+                        }
                     }
                 }
             ) { innerPadding ->
                 when (selectedTab) {
                     0 -> CatalogoShowcaseScreen(modifier = Modifier.padding(innerPadding), ventaViewModel = ventaViewModel)
                     1 -> FavoritosScreen(modifier = Modifier.padding(innerPadding), ventaViewModel = ventaViewModel)
-                    2 -> CarritoScreen(modifier = Modifier.padding(innerPadding), ventaViewModel = ventaViewModel)
-                    3 -> ProductosScreen(modifier = Modifier.padding(innerPadding))
+                    2 -> CarritoScreen(modifier = Modifier.padding(innerPadding), ventaViewModel = ventaViewModel, usuario = usuario)
+                    3 -> if (!esVendedor) ProductosScreen(modifier = Modifier.padding(innerPadding)) else CatalogoShowcaseScreen(modifier = Modifier.padding(innerPadding), ventaViewModel = ventaViewModel)
                 }
             }
 
@@ -296,9 +403,9 @@ fun MainAppLayout(
         }
     }
 
-    // Modal dialog for Alertas desde el menú de 3 barras
+    // Modal para Alertas de Stock
     if (mostrarAlertasDesdeDrawer) {
-        androidx.compose.ui.window.Dialog(
+        Dialog(
             onDismissRequest = { mostrarAlertasDesdeDrawer = false }
         ) {
             Surface(
@@ -332,31 +439,52 @@ fun MainAppLayout(
         }
     }
 
-    // Modal dialog for Perfil
-    if (mostrarPerfilDialog) {
-        AlertDialog(
-            onDismissRequest = { mostrarPerfilDialog = false },
-            title = { Text("Perfil de Usuario") },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text("• Nombre: ${usuario.nombreCompleto}", fontWeight = FontWeight.SemiBold)
-                    Text("• Usuario: ${usuario.username}")
-                    Text("• Rol: ${usuario.rol}")
-                    Text("• Email: ${usuario.email}")
-                }
-            },
-            confirmButton = {
-                Button(onClick = { mostrarPerfilDialog = false }) {
-                    Text("Aceptar")
-                }
-            }
+    // Modal EXCLUSIVO TI (`blorex`): Modificación de App (Logo, Portadas y Gamas de Colores)
+    if (mostrarModificacionApp && esTI) {
+        ModificacionAppDialog(
+            onDismiss = { mostrarModificacionApp = false }
         )
     }
 
-    // Modal dialog for Ajustes with Theme selection
+    // Modal para Historial y Reportes de Ventas
+    if (mostrarHistorialVentas && puedeVerReportesVentas) {
+        HistorialVentasDialog(
+            usuarioLogueado = usuario,
+            onDismiss = { mostrarHistorialVentas = false }
+        )
+    }
+
+    // Modal para Usuarios Activos & Horarios
+    if (mostrarUsuariosActivos) {
+        UsuariosActivosDialog(
+            onDismiss = { mostrarUsuariosActivos = false }
+        )
+    }
+
+    // Modal EXCLUSIVO TI (blorex): Gestión de Usuarios
+    if (mostrarGestionUsuarios && esTI) {
+        GestionUsuariosDialog(
+            onDismiss = { mostrarGestionUsuarios = false }
+        )
+    }
+
+    // Modal EXCLUSIVO TI (blorex): Buzón de Solicitudes de Trabajadores
+    if (mostrarBuzonSolicitudes && esTI) {
+        BuzonSolicitudesDialog(
+            onDismiss = { mostrarBuzonSolicitudes = false }
+        )
+    }
+
+    // Modal para Perfil del Usuario
+    if (mostrarPerfilDialog) {
+        PerfilUsuarioDialog(
+            usuario = usuario,
+            usuarioLogueado = usuario,
+            onDismiss = { mostrarPerfilDialog = false }
+        )
+    }
+
+    // Modal dialog for Ajustes with Theme, Sync Mode and TI App Customization
     if (mostrarAjustesDialog) {
         AlertDialog(
             onDismissRequest = { mostrarAjustesDialog = false },
@@ -364,7 +492,7 @@ fun MainAppLayout(
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -380,8 +508,86 @@ fun MainAppLayout(
 
                     HorizontalDivider()
 
+                    // Opción para la personalización de TI en Ajustes
+                    if (esTI) {
+                        Button(
+                            onClick = {
+                                mostrarAjustesDialog = false
+                                mostrarModificacionApp = true
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                        ) {
+                            Icon(Icons.Default.Palette, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Modificación de App (Logo, Portadas y Colores)")
+                        }
+
+                        HorizontalDivider()
+                    }
+
+                    // Modo de Conexión: Offline Room vs Online Backend
                     Text(
-                        text = "Apariencia y Tema de Pantalla:",
+                        text = "Modo de Base de Datos / Conexión:",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    val opcionesModo = listOf(
+                        ModoConexion.OFFLINE_ROOM to "Modo Offline (Room / SQLite Local)",
+                        ModoConexion.ONLINE_BACKEND to "Modo Online (Sincronización Backend)"
+                    )
+
+                    opcionesModo.forEach { (modo, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = (SyncBackendRepository.modoConexion == modo),
+                                    onClick = { SyncBackendRepository.modoConexion = modo },
+                                    role = Role.RadioButton
+                                )
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = (SyncBackendRepository.modoConexion == modo),
+                                onClick = null
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = label, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+
+                    if (SyncBackendRepository.modoConexion == ModoConexion.ONLINE_BACKEND) {
+                        OutlinedTextField(
+                            value = SyncBackendRepository.servidorUrlInput,
+                            onValueChange = { SyncBackendRepository.servidorUrlInput = it },
+                            label = { Text("URL Servidor Backend") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Button(
+                            onClick = { SyncBackendRepository.sincronizarConServidorBackend(context, scope) },
+                            enabled = !SyncBackendRepository.estaSincronizando,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (SyncBackendRepository.estaSincronizando) "Transmitiendo datos..." else "Sincronizar con Servidor Backend")
+                        }
+
+                        SyncBackendRepository.ultimoMensajeSincronizacion?.let { msg ->
+                            Text(text = msg, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    HorizontalDivider()
+
+                    // Modo de Tema (Independiente de los colores)
+                    Text(
+                        text = "Apariencia y Modo de Pantalla (Independiente):",
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -401,7 +607,7 @@ fun MainAppLayout(
                                     onClick = { authViewModel.opcionTema = opcion },
                                     role = Role.RadioButton
                                 )
-                                .padding(vertical = 4.dp),
+                                .padding(vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             RadioButton(

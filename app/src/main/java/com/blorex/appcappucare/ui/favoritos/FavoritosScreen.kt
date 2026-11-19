@@ -5,27 +5,32 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.blorex.appcappucare.model.Producto
 import com.blorex.appcappucare.repository.FavoritosRepository
+import com.blorex.appcappucare.utils.CompartirUtils
 import com.blorex.appcappucare.viewmodel.VentaViewModel
 
 /**
  * Pantalla de Productos Guardados / Favoritos.
  *
- * Muestra la lista de insumos marcados con el corazón y permite agregarlos directamente
- * al carrito de compras con validación estricta de límites de stock.
+ * Muestra la lista de insumos marcados con el corazón, selector de cantidad deseada (+/-),
+ * botón de compartir insumo por redes sociales y botón directo de "Agregar al Carrito".
  *
  * @param modifier Modificador composable de diseño.
  * @param ventaViewModel ViewModel que administra las compras y el carrito.
@@ -160,8 +165,8 @@ fun FavoritosScreen(
                     FavoritoItemCard(
                         producto = producto,
                         stockActual = stockActual,
-                        onAgregarAlCarrito = {
-                            ventaViewModel.agregarAlCarrito(producto, 1)
+                        onAgregarAlCarritoConCantidad = { cant ->
+                            ventaViewModel.agregarAlCarrito(producto, cant)
                         },
                         onEliminarDeFavoritos = {
                             FavoritosRepository.eliminarFavorito(producto.codigo)
@@ -174,21 +179,23 @@ fun FavoritosScreen(
 }
 
 /**
- * Tarjeta individual de un producto guardado en favoritos.
+ * Tarjeta individual de un producto guardado en favoritos con selector de cantidad (+/-) y botón de compartir.
  *
  * @param producto Insumo mostrado.
  * @param stockActual Cantidad disponible real en sistema.
- * @param onAgregarAlCarrito Callback para añadir 1 unidad al carrito.
+ * @param onAgregarAlCarritoConCantidad Callback para añadir la cantidad deseada al carrito.
  * @param onEliminarDeFavoritos Callback para eliminar de la lista de favoritos.
  */
 @Composable
 fun FavoritoItemCard(
     producto: Producto,
     stockActual: Int,
-    onAgregarAlCarrito: () -> Unit,
+    onAgregarAlCarritoConCantidad: (cantidad: Int) -> Unit,
     onEliminarDeFavoritos: () -> Unit
 ) {
+    val context = LocalContext.current
     val estaAgotado = stockActual <= 0
+    var cantidadDeseada by remember { mutableStateOf(1) }
 
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -216,20 +223,78 @@ fun FavoritoItemCard(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = if (estaAgotado) "¡AGOTADO! No disponible para su venta" else "Disponible: $stockActual ${producto.unidadMedida}",
+                    text = if (estaAgotado) "¡AGOTADO! No disponible" else "Disponible: $stockActual ${producto.unidadMedida}",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = if (estaAgotado) Color(0xFFC62828) else Color(0xFF2E7D32)
                 )
+
+                if (!estaAgotado) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            IconButton(
+                                onClick = { if (cantidadDeseada > 1) cantidadDeseada -= 1 },
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Icon(Icons.Default.Remove, contentDescription = "Restar", modifier = Modifier.size(14.dp))
+                            }
+                        }
+
+                        Text(
+                            text = "$cantidadDeseada",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            IconButton(
+                                onClick = { if (cantidadDeseada < stockActual) cantidadDeseada += 1 },
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Sumar", modifier = Modifier.size(14.dp))
+                            }
+                        }
+                    }
+                }
             }
 
             Column(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                Row {
+                    // Botón Compartir 📲
+                    IconButton(onClick = { CompartirUtils.compartirProducto(context, producto) }) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Compartir",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // Button to Remove from Favorites
+                    IconButton(onClick = onEliminarDeFavoritos) {
+                        Icon(
+                            imageVector = Icons.Default.Favorite,
+                            contentDescription = "Quitar de Favoritos",
+                            tint = Color(0xFFE91E63),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
                 // Button to Add to Cart
                 Button(
-                    onClick = onAgregarAlCarrito,
+                    onClick = { onAgregarAlCarritoConCantidad(cantidadDeseada) },
                     enabled = !estaAgotado,
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
@@ -240,24 +305,7 @@ fun FavoritoItemCard(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(if (estaAgotado) "Agotado" else "Al Carrito", fontSize = 12.sp)
-                }
-
-                // Button to Remove from Favorites
-                OutlinedButton(
-                    onClick = onEliminarDeFavoritos,
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE91E63)),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Favorite,
-                        contentDescription = "Quitar de Favoritos",
-                        tint = Color(0xFFE91E63),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Quitar", fontSize = 11.sp)
+                    Text(if (estaAgotado) "Agotado" else "Agregar ($cantidadDeseada)", fontSize = 11.sp)
                 }
             }
         }

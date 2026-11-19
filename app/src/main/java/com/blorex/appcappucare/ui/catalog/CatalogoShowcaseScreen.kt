@@ -1,5 +1,6 @@
 package com.blorex.appcappucare.ui.catalog
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,29 +10,34 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.LocalOffer
-import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.blorex.appcappucare.model.EstadoStock
 import com.blorex.appcappucare.model.Producto
+import com.blorex.appcappucare.repository.ConfiguracionAppRepository
 import com.blorex.appcappucare.repository.FavoritosRepository
 import com.blorex.appcappucare.repository.ProductosRepository
+import com.blorex.appcappucare.ui.components.CargarImagenProducto
+import com.blorex.appcappucare.utils.CompartirUtils
 import com.blorex.appcappucare.viewmodel.VentaViewModel
 import java.text.NumberFormat
 import java.util.*
@@ -51,14 +57,12 @@ enum class OrdenamientoCatalogo {
 /**
  * Pantalla del Catálogo de Productos (Showcase).
  *
- * Muestra las tarjetas de los productos con filtros de ordenamiento (precio, A-Z),
- * alternancia de vista en Cuadrícula / Lista, apertura del diálogo de Detalle de Producto,
- * y validaciones en tiempo real.
+ * Muestra las tarjetas de los productos optimizando el espacio en pantalla sin márgenes dobles,
+ * con selector de cantidad deseada (+/-), botón de compartir e imagen de portada por color.
  *
- * @param modifier Modificador composable de diseño.
+ * @param modifier Modificador composable de diseño recibido del Scaffold principal.
  * @param ventaViewModel ViewModel que gestiona las transacciones y carrito de compras.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CatalogoShowcaseScreen(
     modifier: Modifier = Modifier,
@@ -73,6 +77,7 @@ fun CatalogoShowcaseScreen(
 
     val todosLosProductos = ProductosRepository.getProductosFicticios()
     val snackbarHostState = remember { SnackbarHostState() }
+    val portadaActualUri = ConfiguracionAppRepository.obtenerPortadaActual()
 
     val productosFiltrados = todosLosProductos.filter {
         it.nombre.contains(busqueda, ignoreCase = true) || it.codigo.contains(busqueda, ignoreCase = true)
@@ -85,49 +90,47 @@ fun CatalogoShowcaseScreen(
         OrdenamientoCatalogo.PRECIO_MENOR_MAYOR -> productosFiltrados.sortedBy { it.valor }
     }
 
-    Scaffold(
-        modifier = modifier,
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { innerPadding ->
+    Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .padding(innerPadding)
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
-            // Header Banner
+            // Header Banner Card con Imagen de Portada vinculada
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(14.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Catálogo de Productos",
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                         Text(
-                            text = "Presiona un insumo para ver sus detalles, precio e imágenes",
+                            text = "Insumos médicos hospitalarios con garantía y despacho",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
-                    Icon(
-                        imageVector = Icons.Default.LocalOffer,
-                        contentDescription = "Catálogo",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(40.dp)
+
+                    // Render Banner Cover Image
+                    CargarImagenProducto(
+                        uriString = portadaActualUri,
+                        modifier = Modifier
+                            .size(54.dp)
+                            .padding(2.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Stock Warning Banner
             ventaViewModel.mensajeAdvertenciaStock.value?.let { advertencia ->
@@ -135,24 +138,24 @@ fun CatalogoShowcaseScreen(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 12.dp),
-                    shape = RoundedCornerShape(12.dp)
+                        .padding(bottom = 8.dp),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.Warning,
                             contentDescription = "Alerta Stock",
                             tint = Color(0xFFE65100),
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = advertencia,
                             color = Color(0xFFE65100),
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.weight(1f)
                         )
@@ -175,15 +178,15 @@ fun CatalogoShowcaseScreen(
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Buscar") },
                     singleLine = true,
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(10.dp)
                 )
 
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
 
                 // Sort Filter Button
                 Box {
                     IconButton(onClick = { mostrarMenuOrden = true }) {
-                        Icon(Icons.Default.Sort, contentDescription = "Ordenar")
+                        Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Ordenar")
                     }
 
                     DropdownMenu(
@@ -224,21 +227,21 @@ fun CatalogoShowcaseScreen(
                 // Grid / List View Toggle Button
                 IconButton(onClick = { esVistaCuadricula = !esVistaCuadricula }) {
                     Icon(
-                        imageVector = if (esVistaCuadricula) Icons.Default.List else Icons.Default.GridView,
+                        imageVector = if (esVistaCuadricula) Icons.AutoMirrored.Filled.List else Icons.Default.GridView,
                         contentDescription = "Cambiar Vista"
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = "Productos Disponibles (${productosOrdenados.size})",
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             if (productosOrdenados.isEmpty()) {
                 Box(
@@ -254,8 +257,9 @@ fun CatalogoShowcaseScreen(
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
                         modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 8.dp)
                     ) {
                         items(
                             items = productosOrdenados,
@@ -267,7 +271,7 @@ fun CatalogoShowcaseScreen(
                                 producto = producto,
                                 stockActual = stockActual,
                                 onClickDetalle = { productoDetalleSeleccionado = producto },
-                                onAgregarAlCarrito = { ventaViewModel.agregarAlCarrito(producto, 1) },
+                                onAgregarAlCarritoConCantidad = { cant -> ventaViewModel.agregarAlCarrito(producto, cant) },
                                 onToggleFavorito = { FavoritosRepository.toggleFavorito(producto.codigo) }
                             )
                         }
@@ -275,7 +279,8 @@ fun CatalogoShowcaseScreen(
                 } else {
                     LazyColumn(
                         modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 8.dp)
                     ) {
                         items(
                             items = productosOrdenados,
@@ -287,7 +292,7 @@ fun CatalogoShowcaseScreen(
                                 producto = producto,
                                 stockActual = stockActual,
                                 onClickDetalle = { productoDetalleSeleccionado = producto },
-                                onAgregarAlCarrito = { ventaViewModel.agregarAlCarrito(producto, 1) },
+                                onAgregarAlCarritoConCantidad = { cant -> ventaViewModel.agregarAlCarrito(producto, cant) },
                                 onToggleFavorito = { FavoritosRepository.toggleFavorito(producto.codigo) }
                             )
                         }
@@ -295,6 +300,11 @@ fun CatalogoShowcaseScreen(
                 }
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 
     // Modal de Detalle de Producto al presionar una tarjeta
@@ -304,37 +314,41 @@ fun CatalogoShowcaseScreen(
             producto = producto,
             stockActual = stockActual,
             onDismiss = { productoDetalleSeleccionado = null },
-            onAgregarAlCarrito = { ventaViewModel.agregarAlCarrito(producto, 1) },
+            onAgregarAlCarritoConCantidad = { cant -> ventaViewModel.agregarAlCarrito(producto, cant) },
             onToggleFavorito = { FavoritosRepository.toggleFavorito(producto.codigo) }
         )
     }
 }
 
 /**
- * Tarjeta de presentación en modo Cuadrícula (Grid) para un producto.
+ * Tarjeta de presentación en modo Cuadrícula (Grid) con selector de cantidad deseada (+/-) y botón de compartir.
  */
 @Composable
 fun ProductoShowcaseCard(
     producto: Producto,
     stockActual: Int,
     onClickDetalle: () -> Unit,
-    onAgregarAlCarrito: () -> Unit,
+    onAgregarAlCarritoConCantidad: (cantidad: Int) -> Unit,
     onToggleFavorito: () -> Unit
 ) {
+    val context = LocalContext.current
     val esFav = FavoritosRepository.esFavorito(producto.codigo)
     val estaAgotado = stockActual <= 0
     val formatoMoneda = NumberFormat.getCurrencyInstance(Locale.getDefault()).apply {
         maximumFractionDigits = 0
     }
+    val primeraImagen = producto.imagenes.firstOrNull() ?: ""
+
+    var cantidadDeseada by remember { mutableStateOf(1) }
 
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClickDetalle() },
-        shape = RoundedCornerShape(14.dp)
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(
-            modifier = Modifier.padding(10.dp),
+            modifier = Modifier.padding(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(
@@ -342,51 +356,59 @@ fun ProductoShowcaseCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
+                CargarImagenProducto(
+                    uriString = primeraImagen,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .background(MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(8.dp))
+                )
+
+                Row {
+                    // Botón Compartir 📲
+                    IconButton(
+                        onClick = { CompartirUtils.compartirProducto(context, producto) },
+                        modifier = Modifier.size(26.dp)
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.MedicalServices,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(20.dp)
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Compartir",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onToggleFavorito,
+                        modifier = Modifier.size(26.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (esFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = "Favorito",
+                            tint = if (esFav) Color(0xFFE91E63) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
-
-                IconButton(
-                    onClick = onToggleFavorito,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = if (esFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = "Favorito",
-                        tint = if (esFav) Color(0xFFE91E63) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = producto.nombre,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 maxLines = 2
             )
 
             Text(
                 text = "Precio: ${formatoMoneda.format(producto.valor)}",
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(3.dp))
 
             Surface(
                 color = when {
@@ -394,10 +416,10 @@ fun ProductoShowcaseCard(
                     producto.estadoStock == EstadoStock.STOCK_BAJO -> Color(0xFFFFF8E1)
                     else -> Color(0xFFE8F5E9)
                 },
-                shape = RoundedCornerShape(6.dp)
+                shape = RoundedCornerShape(4.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -408,12 +430,12 @@ fun ProductoShowcaseCard(
                             producto.estadoStock == EstadoStock.STOCK_BAJO -> Color(0xFFF57F17)
                             else -> Color(0xFF2E7D32)
                         },
-                        modifier = Modifier.size(12.dp)
+                        modifier = Modifier.size(10.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
                     Text(
                         text = if (estaAgotado) "AGOTADO" else "Stock: $stockActual ${producto.unidadMedida}",
-                        fontSize = 10.sp,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         color = when {
                             estaAgotado -> Color(0xFFC62828)
@@ -424,43 +446,88 @@ fun ProductoShowcaseCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Selector de Cantidad Deseada (+ / -)
+            if (!estaAgotado) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        IconButton(
+                            onClick = { if (cantidadDeseada > 1) cantidadDeseada -= 1 },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Default.Remove, contentDescription = "Restar", modifier = Modifier.size(12.dp))
+                        }
+                    }
+
+                    Text(
+                        text = "$cantidadDeseada",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(horizontal = 6.dp)
+                    )
+
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        IconButton(
+                            onClick = { if (cantidadDeseada < stockActual) cantidadDeseada += 1 },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Sumar", modifier = Modifier.size(12.dp))
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
 
             Button(
-                onClick = onAgregarAlCarrito,
+                onClick = { onAgregarAlCarritoConCantidad(cantidadDeseada) },
                 enabled = !estaAgotado,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.AddShoppingCart,
                     contentDescription = null,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(13.dp)
                 )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(if (estaAgotado) "No disponible" else "Al Carrito", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(if (estaAgotado) "Agotado" else "Agregar ($cantidadDeseada)", fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
 /**
- * Tarjeta de presentación en modo Lista para un producto.
+ * Tarjeta de presentación en modo Lista con selector de cantidad (+/-) y botón de compartir.
  */
 @Composable
 fun ProductoItemLista(
     producto: Producto,
     stockActual: Int,
     onClickDetalle: () -> Unit,
-    onAgregarAlCarrito: () -> Unit,
+    onAgregarAlCarritoConCantidad: (cantidad: Int) -> Unit,
     onToggleFavorito: () -> Unit
 ) {
+    val context = LocalContext.current
     val esFav = FavoritosRepository.esFavorito(producto.codigo)
     val estaAgotado = stockActual <= 0
     val formatoMoneda = NumberFormat.getCurrencyInstance(Locale.getDefault()).apply {
         maximumFractionDigits = 0
     }
+    val primeraImagen = producto.imagenes.firstOrNull() ?: ""
+
+    var cantidadDeseada by remember { mutableStateOf(1) }
 
     ElevatedCard(
         modifier = Modifier
@@ -471,30 +538,22 @@ fun ProductoItemLista(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.size(48.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.MedicalServices,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-            }
+            CargarImagenProducto(
+                uriString = primeraImagen,
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(8.dp))
+            )
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = producto.nombre,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
 
@@ -509,29 +568,79 @@ fun ProductoItemLista(
 
                 Text(
                     text = if (estaAgotado) "AGOTADO (0 ${producto.unidadMedida})" else "Stock real: $stockActual ${producto.unidadMedida}",
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = if (estaAgotado) Color(0xFFC62828) else Color(0xFF2E7D32)
                 )
+
+                if (!estaAgotado) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            IconButton(
+                                onClick = { if (cantidadDeseada > 1) cantidadDeseada -= 1 },
+                                modifier = Modifier.size(22.dp)
+                            ) {
+                                Icon(Icons.Default.Remove, contentDescription = "Restar", modifier = Modifier.size(12.dp))
+                            }
+                        }
+
+                        Text(
+                            text = "$cantidadDeseada",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 6.dp)
+                        )
+
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            IconButton(
+                                onClick = { if (cantidadDeseada < stockActual) cantidadDeseada += 1 },
+                                modifier = Modifier.size(22.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Sumar", modifier = Modifier.size(12.dp))
+                            }
+                        }
+                    }
+                }
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onToggleFavorito) {
-                    Icon(
-                        imageVector = if (esFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = "Favorito",
-                        tint = if (esFav) Color(0xFFE91E63) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            Column(horizontalAlignment = Alignment.End) {
+                Row {
+                    IconButton(onClick = { CompartirUtils.compartirProducto(context, producto) }, modifier = Modifier.size(28.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Compartir",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    IconButton(onClick = onToggleFavorito, modifier = Modifier.size(28.dp)) {
+                        Icon(
+                            imageVector = if (esFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = "Favorito",
+                            tint = if (esFav) Color(0xFFE91E63) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
 
                 IconButton(
-                    onClick = onAgregarAlCarrito,
-                    enabled = !estaAgotado
+                    onClick = { onAgregarAlCarritoConCantidad(cantidadDeseada) },
+                    enabled = !estaAgotado,
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.AddShoppingCart,
                         contentDescription = "Al Carrito",
-                        tint = if (estaAgotado) Color.Gray else MaterialTheme.colorScheme.primary
+                        tint = if (estaAgotado) Color.Gray else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }

@@ -13,36 +13,41 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.blorex.appcappucare.model.Usuario
 import com.blorex.appcappucare.model.VentaItem
 import com.blorex.appcappucare.viewmodel.VentaViewModel
 
 /**
  * Pantalla del Carrito de Compras.
  *
- * Muestra la lista de insumos agregados con validación de stock en tiempo real.
- * Si un producto se agota o supera la disponibilidad en sistema, bloquea la compra e indica advertencias.
+ * Muestra la lista de insumos agregados con validación de stock en tiempo real,
+ * botón para abrir el Formulario de Checkout y Facturación para Chile (Boleta/Factura, Regiones y Webpay)
+ * y procesamiento con simulación de carga interactiva de 4 segundos.
  *
  * @param modifier Modificador composable de diseño.
  * @param ventaViewModel ViewModel del carrito y pagos.
+ * @param usuario Usuario trabajador autenticado.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CarritoScreen(
     modifier: Modifier = Modifier,
-    ventaViewModel: VentaViewModel
+    ventaViewModel: VentaViewModel,
+    usuario: Usuario? = null
 ) {
     val itemsCarrito = ventaViewModel.carrito.value
     val totalItems = itemsCarrito.sumOf { it.cantidadVendida }
     val scope = rememberCoroutineScope()
     val procesandoPago = ventaViewModel.procesandoPago
+
+    var mostrarCheckoutDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -106,13 +111,13 @@ fun CarritoScreen(
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
                         Text(
-                            text = "Procesando pago de la compra...",
+                            text = "Procesando pago en pasarela Webpay...",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                         Text(
-                            text = "Por favor espera un momento mientras confirmamos...",
+                            text = "Confirmando con el servidor remoto Backend...",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
@@ -172,7 +177,7 @@ fun CarritoScreen(
                         text = mensaje,
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         modifier = Modifier.weight(1f)
                     )
                     TextButton(onClick = { ventaViewModel.limpiarMensaje() }) {
@@ -243,22 +248,9 @@ fun CarritoScreen(
             HorizontalDivider()
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Customer Name Field
-            OutlinedTextField(
-                value = ventaViewModel.cliente.value,
-                onValueChange = { ventaViewModel.cliente.value = it },
-                label = { Text("Cliente / Destino de la Venta") },
-                enabled = !procesandoPago,
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Pay Button with Interactive Loading Trigger
+            // Pay Button triggering FormularioCheckoutDialog
             Button(
-                onClick = { ventaViewModel.pagarProductosConCarga(scope) },
+                onClick = { mostrarCheckoutDialog = true },
                 enabled = itemsCarrito.isNotEmpty() && !procesandoPago,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -290,17 +282,20 @@ fun CarritoScreen(
             }
         }
     }
+
+    // Modal de Checkout y Facturación
+    if (mostrarCheckoutDialog) {
+        FormularioCheckoutDialog(
+            onDismiss = { mostrarCheckoutDialog = false },
+            onConfirmarCheckout = { datos ->
+                ventaViewModel.pagarProductosConCarga(scope, datos, usuario)
+            }
+        )
+    }
 }
 
 /**
  * Tarjeta de producto individual dentro de la lista del carrito con validación de stock en tiempo real.
- *
- * @param item Ítem del carrito.
- * @param stockRealEnSistema Cantidad existente actual en el inventario.
- * @param enabled Estado habilitado para interacciones.
- * @param onIncrementar Callback para sumar 1 unidad.
- * @param onDecrementar Callback para restar 1 unidad.
- * @param onEliminar Callback para eliminar el ítem.
  */
 @Composable
 fun CarritoItemCard(

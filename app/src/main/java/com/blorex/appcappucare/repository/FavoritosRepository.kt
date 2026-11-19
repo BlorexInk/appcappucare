@@ -2,84 +2,84 @@ package com.blorex.appcappucare.repository
 
 import android.content.Context
 import androidx.compose.runtime.mutableStateListOf
-import com.blorex.appcappucare.db.ProductosDatabaseHelper
 import com.blorex.appcappucare.model.Producto
+import com.blorex.appcappucare.room.AppRoomDatabase
+import com.blorex.appcappucare.room.entities.FavoritoEntity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
- * Repositorio reactivo y persistente para la gestión de productos marcados como favoritos / guardados con el corazón.
- *
- * Sincroniza las adiciones y eliminaciones directamente con la base de datos SQLite/Room
- * para conservar las elecciones del usuario de forma permanente tras reiniciar la app.
+ * Repositorio encargado de la gestión persistente de productos marcados como Favoritos en Jetpack Room.
  */
 object FavoritosRepository {
 
-    private var dbHelper: ProductosDatabaseHelper? = null
+    private var roomDatabase: AppRoomDatabase? = null
+    private val codigosFavoritos = mutableStateListOf<String>()
 
-    /** Lista reactiva que almacena los códigos de los productos guardados como favoritos. */
-    private val favoritosCodigos = mutableStateListOf<String>()
-
-    /**
-     * Inicializa la base de datos de favoritos y carga los códigos persistidos.
-     *
-     * @param context Contexto de la aplicación.
-     */
+    /** Inicializa la conexión con Room y carga la lista de favoritos. */
     fun inicializar(context: Context) {
-        if (dbHelper == null) {
-            dbHelper = ProductosDatabaseHelper(context.applicationContext)
-            cargarFavoritosDesdeDb()
+        if (roomDatabase == null) {
+            roomDatabase = AppRoomDatabase.getDatabase(context.applicationContext)
+            cargarDesdeDb()
         }
     }
 
-    /** Carga la lista de códigos de favoritos guardados físicamente en la base de datos local. */
-    fun cargarFavoritosDesdeDb() {
-        dbHelper?.let { helper ->
-            val favsDb = helper.obtenerFavoritosCodigos()
-            favoritosCodigos.clear()
-            favoritosCodigos.addAll(favsDb)
+    /** Carga los códigos de productos favoritos desde Room. */
+    fun cargarDesdeDb() {
+        roomDatabase?.let { db ->
+            CoroutineScope(Dispatchers.IO).launch {
+                val codigos = db.favoritoDao().obtenerFavoritosCodigos()
+                CoroutineScope(Dispatchers.Main).launch {
+                    codigosFavoritos.clear()
+                    codigosFavoritos.addAll(codigos)
+                }
+            }
         }
     }
 
-    /**
-     * Verifica si un producto específico se encuentra en la lista de favoritos.
-     *
-     * @param codigo Código único del producto.
-     * @return `true` si el producto está guardado; `false` de lo contrario.
-     */
+    /** Indica si un código de producto está marcado en favoritos. */
     fun esFavorito(codigo: String): Boolean {
-        return favoritosCodigos.contains(codigo.trim().uppercase())
+        return codigosFavoritos.contains(codigo.trim().uppercase())
     }
 
-    /**
-     * Alterna el estado de favorito de un producto y lo persiste en la base de datos local SQLite.
-     *
-     * @param codigo Código del producto a marcar o desmarcar.
-     */
+    /** Alterna el estado de favorito de un producto. */
     fun toggleFavorito(codigo: String) {
         val cod = codigo.trim().uppercase()
-        if (favoritosCodigos.contains(cod)) {
+        if (esFavorito(cod)) {
             eliminarFavorito(cod)
         } else {
-            favoritosCodigos.add(cod)
-            dbHelper?.agregarFavoritoCodigo(cod)
+            agregarFavorito(cod)
         }
     }
 
-    /**
-     * Elimina un producto de la lista de favoritos y lo remueve físicamente de la base de datos local.
-     *
-     * @param codigo Código del producto a eliminar.
-     */
-    fun eliminarFavorito(codigo: String) {
+    /** Agrega un producto a favoritos y lo persiste en Room. */
+    fun agregarFavorito(codigo: String) {
         val cod = codigo.trim().uppercase()
-        favoritosCodigos.remove(cod)
-        dbHelper?.eliminarFavoritoCodigo(cod)
+        if (!esFavorito(cod)) {
+            roomDatabase?.let { db ->
+                CoroutineScope(Dispatchers.IO).launch {
+                    db.favoritoDao().agregarFavorito(FavoritoEntity(cod))
+                }
+            }
+            codigosFavoritos.add(cod)
+        }
     }
 
-    /**
-     * Obtiene la lista completa de objetos [Producto] que han sido marcados como favoritos en tiempo real.
-     *
-     * @return Lista de productos favoritos existentes en el inventario.
-     */
+    /** Elimina un producto de favoritos en Room. */
+    fun eliminarFavorito(codigo: String) {
+        val cod = codigo.trim().uppercase()
+        if (esFavorito(cod)) {
+            roomDatabase?.let { db ->
+                CoroutineScope(Dispatchers.IO).launch {
+                    db.favoritoDao().eliminarFavorito(cod)
+                }
+            }
+            codigosFavoritos.remove(cod)
+        }
+    }
+
+    /** Retorna los objetos [Producto] que coinciden con los códigos favoritos. */
     fun obtenerProductosFavoritos(): List<Producto> {
         val todos = ProductosRepository.getProductosFicticios()
         return todos.filter { esFavorito(it.codigo) }

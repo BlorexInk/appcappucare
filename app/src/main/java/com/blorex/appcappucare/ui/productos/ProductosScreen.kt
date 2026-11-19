@@ -1,40 +1,57 @@
 package com.blorex.appcappucare.ui.productos
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.blorex.appcappucare.model.EstadoStock
 import com.blorex.appcappucare.model.Producto
 import com.blorex.appcappucare.repository.ProductosRepository
+import com.blorex.appcappucare.ui.components.CargarImagenProducto
+import com.blorex.appcappucare.utils.CompartirUtils
 import com.blorex.appcappucare.viewmodel.ProductosViewModel
+import java.io.File
 import java.text.NumberFormat
 import java.util.*
 
 /**
  * Pantalla de Gestión de Productos / Inventario CRUD.
  *
- * Ofrece listado completo de insumos, barra de búsqueda, botón para agregar nuevo producto
- * con generación automática de código por nombre, campos para descripción, valor ($) e imágenes,
- * y opciones para editar y eliminar productos.
+ * Ofrece listado completo de insumos, generación automática de código por nombre,
+ * captura de fotos con la cámara nativa mediante FileProvider, selección desde la Galería,
+ * compartir por redes sociales y operaciones de edición y borrado.
  *
  * @param modifier Modificador composable de diseño.
  * @param vm ViewModel de gestión de inventario.
@@ -192,16 +209,18 @@ fun ProductosScreen(
     }
 }
 
-/** Tarjeta individual de inventario. */
+/** Tarjeta individual de inventario con thumbnail de imagen y botón de compartir. */
 @Composable
 fun ProductoCard(
     producto: Producto,
     onEditar: () -> Unit,
     onEliminar: () -> Unit
 ) {
+    val context = LocalContext.current
     val formatoMoneda = NumberFormat.getCurrencyInstance(Locale.getDefault()).apply {
         maximumFractionDigits = 0
     }
+    val primeraImagen = producto.imagenes.firstOrNull() ?: ""
 
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -213,6 +232,15 @@ fun ProductoCard(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            CargarImagenProducto(
+                uriString = primeraImagen,
+                modifier = Modifier
+                    .size(52.dp)
+                    .background(MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(8.dp))
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = producto.nombre,
@@ -243,8 +271,15 @@ fun ProductoCard(
                 }
             }
 
-            // Action Buttons
+            // Action Buttons (Share, Edit, Delete)
             Row {
+                IconButton(onClick = { CompartirUtils.compartirProducto(context, producto) }) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "Compartir Producto",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
                 IconButton(onClick = onEditar) {
                     Icon(
                         imageVector = Icons.Default.Edit,
@@ -287,7 +322,7 @@ fun EstadoStockBadge(estado: EstadoStock) {
     }
 }
 
-/** Formulario para agregar / editar producto con generación automática de código e imágenes. */
+/** Formulario para agregar / editar producto con generación automática de código, captura de Cámara nativa y Galería. */
 @Composable
 fun FormularioProductoDialog(
     productoEdicion: Producto?,
@@ -295,6 +330,8 @@ fun FormularioProductoDialog(
     onDismiss: () -> Unit,
     onGuardar: (codigo: String, nombre: String, descripcion: String, valor: Double, cantidad: Int, unidad: String, min: Int, imagenes: List<String>) -> Unit
 ) {
+    val context = LocalContext.current
+
     var nombre by remember { mutableStateOf(productoEdicion?.nombre ?: "") }
     var codigo by remember { mutableStateOf(productoEdicion?.codigo ?: "") }
     var descripcion by remember { mutableStateOf(productoEdicion?.descripcion ?: "") }
@@ -302,9 +339,63 @@ fun FormularioProductoDialog(
     var cantidadText by remember { mutableStateOf(productoEdicion?.cantidadDisponible?.toString() ?: "20") }
     var unidadMedida by remember { mutableStateOf(productoEdicion?.unidadMedida ?: "un") }
     var nivelMinimoText by remember { mutableStateOf(productoEdicion?.nivelMinimo?.toString() ?: "10") }
-    var imagenesList by remember { mutableStateOf(productoEdicion?.imagenes ?: listOf("imagen_1.jpg")) }
+    var imagenesList by remember { mutableStateOf(productoEdicion?.imagenes ?: emptyList()) }
+
+    var fotoTempUri by remember { mutableStateOf<Uri?>(null) }
 
     val esEdicion = productoEdicion != null
+
+    // Launcher para Galería de fotos del teléfono
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null && imagenesList.size < 4) {
+            imagenesList = imagenesList + uri.toString()
+        }
+    }
+
+    // Launcher para Cámara Nativa mediante FileProvider
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { exitoso ->
+        if (exitoso && fotoTempUri != null && imagenesList.size < 4) {
+            imagenesList = imagenesList + fotoTempUri.toString()
+        }
+    }
+
+    fun ejecutarAperturaCamara() {
+        try {
+            val imagenesDir = File(context.filesDir, "imagenes_productos").apply { if (!exists()) mkdirs() }
+            val tempFile = File.createTempFile("prod_${System.currentTimeMillis()}_", ".jpg", imagenesDir)
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                tempFile
+            )
+            fotoTempUri = uri
+            cameraLauncher.launch(uri)
+        } catch (e: Exception) {
+            // Manejo silencioso
+        }
+    }
+
+    // Launcher de Permiso de Cámara
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { concedido ->
+        if (concedido) {
+            ejecutarAperturaCamara()
+        }
+    }
+
+    fun solicitarCamara() {
+        val permisoCamara = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+        if (permisoCamara == PackageManager.PERMISSION_GRANTED) {
+            ejecutarAperturaCamara()
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -328,7 +419,6 @@ fun FormularioProductoDialog(
                     value = nombre,
                     onValueChange = { newNombre ->
                         nombre = newNombre
-                        // Generación automática de código por el nombre si es un nuevo producto
                         if (!esEdicion) {
                             codigo = ProductosRepository.generarCodigoPredefinido(newNombre)
                         }
@@ -338,7 +428,7 @@ fun FormularioProductoDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Código (Predefinido por Nombre)
+                // Código
                 OutlinedTextField(
                     value = codigo,
                     onValueChange = { codigo = it },
@@ -395,28 +485,74 @@ fun FormularioProductoDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Imágenes asociadas
+                // Opciones de Captura simples: Cámara y Galería
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Imágenes asociadas: ${imagenesList.size}/4",
+                        text = "Fotos (${imagenesList.size}/4):",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold
                     )
 
                     if (imagenesList.size < 4) {
-                        TextButton(
-                            onClick = {
-                                val nuevaNum = imagenesList.size + 1
-                                imagenesList = imagenesList + "imagen_$nuevaNum.jpg"
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            // Botón Cámara simple
+                            Button(
+                                onClick = { solicitarCamara() },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Tomar Foto", fontSize = 10.sp)
                             }
-                        ) {
-                            Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Añadir foto")
+
+                            // Botón Galería simple
+                            Button(
+                                onClick = { galleryLauncher.launch("image/*") },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Galería", fontSize = 10.sp)
+                            }
+                        }
+                    }
+                }
+
+                // Thumbnails de fotos elegidas
+                if (imagenesList.isNotEmpty()) {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        itemsIndexed(imagenesList) { index, imgUri ->
+                            Box {
+                                CargarImagenProducto(
+                                    uriString = imgUri,
+                                    modifier = Modifier
+                                        .size(54.dp)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(8.dp))
+                                )
+                                Surface(
+                                    color = Color.Red,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .size(18.dp)
+                                        .clickable {
+                                            val mutable = imagenesList.toMutableList()
+                                            mutable.removeAt(index)
+                                            imagenesList = mutable
+                                        }
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.Close, contentDescription = "Quitar", tint = Color.White, modifier = Modifier.size(12.dp))
+                                    }
+                                }
+                            }
                         }
                     }
                 }

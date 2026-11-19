@@ -15,18 +15,38 @@ data class VentaItem(
 )
 
 /**
- * Modelo de datos que representa una transacción de venta completada en el sistema.
+ * Modelo de datos que representa una transacción de venta completada en el sistema con desglose de comprador y vendedor.
  *
  * @property folio Identificador o número de comprobante único generado para la venta.
  * @property fecha Fecha y hora en que se procesó la transacción.
- * @property cliente Nombre o razón social del cliente.
+ * @property cliente Nombre o razón social del cliente comprador.
  * @property items Lista de productos y cantidades incluidas en la venta.
  * @property totalItems Suma total de unidades vendidas en la transacción.
+ * @property montoTotal Suma total en dinero ($) de la transacción.
+ * @property vendedorUsername Usuario del trabajador que realizó la venta.
+ * @property vendedorNombre Nombre completo del trabajador vendedor.
+ * @property tipoComprobante Documento emitido ("Boleta" o "Factura").
+ * @property metodoPago Pasarela o medio de pago ("Webpay / Transbank", "Transferencia", "Efectivo").
+ * @property emailCliente Correo de contacto del comprador.
+ * @property telefonoCliente Teléfono de contacto del comprador.
+ * @property direccionCliente Dirección de despacho o facturación.
+ * @property regionCliente Región de Chile del comprador.
+ * @property comunaCliente Comuna de Chile del comprador.
  */
 data class Venta(
     val folio: String = "VTA-${(1000..9999).random()}",
     val fecha: String = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date()),
     val cliente: String,
     val items: List<VentaItem>,
-    val totalItems: Int = items.sumOf { it.cantidadVendida }
+    val totalItems: Int = items.sumOf { it.cantidadVendida },
+    val montoTotal: Double = items.sumOf { it.producto.valor * it.cantidadVendida },
+    val vendedorUsername: String = "vendedor",
+    val vendedorNombre: String = "Luis Gómez",
+    val tipoComprobante: String = "Boleta",
+    val metodoPago: String = "Webpay / Transbank",
+    val emailCliente: String = "",
+    val telefonoCliente: String = "",
+    val direccionCliente: String = "",
+    val regionCliente: String = "",
+    val comunaCliente: String = ""
 )
