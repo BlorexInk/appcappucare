@@ -218,6 +218,9 @@ app.post('/api/configuracion', (req, res) => {
     });
 });
 
+// Asistente de compras con IA (ver backend/ia.js y backend/.env.example)
+require('./ia')(app);
+
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`=================================================`);
     console.log(` Servidor Backend AppCappuCare ejecutándose`);
