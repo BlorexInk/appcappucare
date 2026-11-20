@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,6 +37,7 @@ import com.blorex.appcappucare.model.Producto
 import com.blorex.appcappucare.repository.ConfiguracionAppRepository
 import com.blorex.appcappucare.repository.FavoritosRepository
 import com.blorex.appcappucare.repository.ProductosRepository
+import com.blorex.appcappucare.ui.asistente.AsistenteIADialog
 import com.blorex.appcappucare.ui.components.CargarImagenProducto
 import com.blorex.appcappucare.utils.CompartirUtils
 import com.blorex.appcappucare.viewmodel.VentaViewModel
@@ -72,6 +74,7 @@ fun CatalogoShowcaseScreen(
     var esVistaCuadricula by remember { mutableStateOf(true) }
     var ordenActual by remember { mutableStateOf(OrdenamientoCatalogo.ALFABETICO_AZ) }
     var mostrarMenuOrden by remember { mutableStateOf(false) }
+    var mostrarAsistente by remember { mutableStateOf(false) }
 
     var productoDetalleSeleccionado by remember { mutableStateOf<Producto?>(null) }
 
@@ -128,6 +131,24 @@ fun CatalogoShowcaseScreen(
                             .padding(2.dp)
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Asistente de compras con IA
+            FilledTonalButton(
+                onClick = { mostrarAsistente = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Asistente de compras con IA")
+            }
+            if (mostrarAsistente) {
+                AsistenteIADialog(
+                    ventaViewModel = ventaViewModel,
+                    onCerrar = { mostrarAsistente = false }
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
