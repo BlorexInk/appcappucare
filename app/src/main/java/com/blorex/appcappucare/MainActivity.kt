@@ -1,3 +1,4 @@
+
 package com.blorex.appcappucare
 
 import android.os.Bundle
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -34,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
+
 import com.blorex.appcappucare.model.EstadoStock
 import com.blorex.appcappucare.model.Usuario
 import com.blorex.appcappucare.repository.AuthRepository
@@ -42,6 +45,7 @@ import com.blorex.appcappucare.repository.ProductosRepository
 import com.blorex.appcappucare.repository.SolicitudesRepository
 import com.blorex.appcappucare.repository.sync.ModoConexion
 import com.blorex.appcappucare.repository.sync.SyncBackendRepository
+
 import com.blorex.appcappucare.ui.admin.ModificacionAppDialog
 import com.blorex.appcappucare.ui.auth.LoginScreen
 import com.blorex.appcappucare.ui.carrito.CarritoScreen
@@ -49,6 +53,7 @@ import com.blorex.appcappucare.ui.catalog.CatalogoShowcaseScreen
 import com.blorex.appcappucare.ui.components.BurbujaAlertaFlotante
 import com.blorex.appcappucare.ui.components.CargarImagenProducto
 import com.blorex.appcappucare.ui.dashboard.DashboardNotificacionesScreen
+import com.blorex.appcappucare.ui.escaner.EscanearQrScreen
 import com.blorex.appcappucare.ui.favoritos.FavoritosScreen
 import com.blorex.appcappucare.ui.productos.ProductosScreen
 import com.blorex.appcappucare.ui.theme.AppcappucareTheme
@@ -60,18 +65,22 @@ import com.blorex.appcappucare.ui.usuarios.UsuariosActivosDialog
 import com.blorex.appcappucare.ui.ventas.HistorialVentasDialog
 import com.blorex.appcappucare.viewmodel.AuthViewModel
 import com.blorex.appcappucare.viewmodel.VentaViewModel
+
 import kotlinx.coroutines.launch
 
 /**
- * Actividad principal de la aplicación AppCappuCare con Control de Acceso por Roles (RBAC).
+ * Actividad principal de la aplicación AppCappuCare.
  */
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         ProductosRepository.inicializarBaseDeDatos(this)
         AuthRepository.inicializar(this)
         SolicitudesRepository.inicializar(this)
         ConfiguracionAppRepository.inicializar(this)
+
         setContent {
             AppNavigationRoot()
         }
@@ -79,13 +88,15 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * Componente raíz de navegación y envoltorio del tema [AppcappucareTheme].
+ * Componente raíz de navegación y envoltorio del tema.
  */
 @Composable
 fun AppNavigationRoot(
     authViewModel: AuthViewModel = viewModel()
 ) {
+
     val context = LocalContext.current
+
     LaunchedEffect(Unit) {
         ProductosRepository.inicializarBaseDeDatos(context)
         AuthRepository.inicializar(context)
@@ -94,15 +105,20 @@ fun AppNavigationRoot(
     }
 
     AppcappucareTheme(opcionTema = authViewModel.opcionTema) {
+
         Surface(modifier = Modifier.fillMaxSize()) {
+
             val usuario = authViewModel.usuarioLogueado
 
             if (usuario == null) {
+
                 LoginScreen(
                     authViewModel = authViewModel,
-                    onLoginSuccess = { /* Autenticado */ }
+                    onLoginSuccess = { }
                 )
+
             } else {
+
                 MainAppLayout(
                     usuario = usuario,
                     authViewModel = authViewModel
@@ -113,9 +129,7 @@ fun AppNavigationRoot(
 }
 
 /**
- * Layout principal con Control de Acceso basado en Roles (RBAC).
- *
- * Restringe funciones exclusivas para TI (`blorex`), Administradores y Vendedores.
+ * Layout principal con control de acceso basado en roles.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,16 +138,33 @@ fun MainAppLayout(
     authViewModel: AuthViewModel,
     ventaViewModel: VentaViewModel = viewModel()
 ) {
+
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    val esTI = usuario.username.equals("blorex", ignoreCase = true) || usuario.rol.equals("TI", ignoreCase = true)
-    val esVendedor = usuario.rol.equals("Vendedor", ignoreCase = true)
-    val puedeVerReportesVentas = esTI || usuario.rol.equals("Administrador", ignoreCase = true) || usuario.rol.equals("Gerente de Tienda", ignoreCase = true)
+    val esTI =
+        usuario.username.equals("blorex", ignoreCase = true) ||
+                usuario.rol.equals("TI", ignoreCase = true)
 
-    // Pantalla inicial por defecto: Catálogo (0)
-    var selectedTab by remember { mutableStateOf(0) }
+    val esVendedor =
+        usuario.rol.equals("Vendedor", ignoreCase = true)
+
+    val puedeVerReportesVentas =
+        esTI ||
+                usuario.rol.equals("Administrador", ignoreCase = true) ||
+                usuario.rol.equals("Gerente de Tienda", ignoreCase = true)
+
+    // Navegación de las pantallas
+    // 0 Catálogo
+    // 1 Favoritos
+    // 2 Carrito
+    // 3 Inventario
+    // 4 Escáner QR
+
+    var selectedTab by remember {
+        mutableStateOf(0)
+    }
 
     var mostrarPerfilDialog by remember { mutableStateOf(false) }
     var mostrarAjustesDialog by remember { mutableStateOf(false) }
@@ -145,33 +176,54 @@ fun MainAppLayout(
     var mostrarModificacionApp by remember { mutableStateOf(false) }
     var mostrarBurbujaFlotante by remember { mutableStateOf(true) }
 
-    val totalItemsEnCarrito = ventaViewModel.carrito.value.sumOf { it.cantidadVendida }
-    val todosLosProductos = ProductosRepository.getProductosFicticios()
-    val totalAlertas = todosLosProductos.count { it.estadoStock == EstadoStock.AGOTADO || it.estadoStock == EstadoStock.STOCK_BAJO }
-    val conteoSolicitudesPendientes = SolicitudesRepository.conteoPendientes()
-    val logoAppUri = ConfiguracionAppRepository.logoAppUri
+    val totalItemsEnCarrito =
+        ventaViewModel.carrito.value.sumOf { it.cantidadVendida }
+
+    val todosLosProductos =
+        ProductosRepository.getProductosFicticios()
+
+    val totalAlertas = todosLosProductos.count {
+        it.estadoStock == EstadoStock.AGOTADO ||
+                it.estadoStock == EstadoStock.STOCK_BAJO
+    }
+
+    val conteoSolicitudesPendientes =
+        SolicitudesRepository.conteoPendientes()
+
+    val logoAppUri =
+        ConfiguracionAppRepository.logoAppUri
 
     ModalNavigationDrawer(
+
         drawerState = drawerState,
+
         drawerContent = {
+
             ModalDrawerSheet {
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(20.dp)
                 ) {
+
                     Surface(
                         color = MaterialTheme.colorScheme.primaryContainer,
                         shape = CircleShape,
                         modifier = Modifier.size(56.dp)
                     ) {
+
                         Box(contentAlignment = Alignment.Center) {
+
                             if (logoAppUri.isNotBlank()) {
+
                                 CargarImagenProducto(
                                     uriString = logoAppUri,
                                     modifier = Modifier.fillMaxSize()
                                 )
+
                             } else {
+
                                 Text(
                                     text = usuario.username.take(2).uppercase(),
                                     fontWeight = FontWeight.Bold,
@@ -202,10 +254,18 @@ fun MainAppLayout(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Drawer Option: Alertas de Stock
+                    // Alertas de stock
                     NavigationDrawerItem(
-                        icon = { Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                        label = { Text("Alertas de Stock ($totalAlertas)") },
+                        icon = {
+                            Icon(
+                                Icons.Default.Notifications,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        label = {
+                            Text("Alertas de Stock ($totalAlertas)")
+                        },
                         selected = false,
                         onClick = {
                             scope.launch { drawerState.close() }
@@ -213,11 +273,20 @@ fun MainAppLayout(
                         }
                     )
 
-                    // Drawer Option: Historial y Reportes de Ventas
+                    // Historial y reportes de ventas
                     if (puedeVerReportesVentas) {
+
                         NavigationDrawerItem(
-                            icon = { Icon(Icons.Default.PointOfSale, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                            label = { Text("Historial & Reportes Ventas") },
+                            icon = {
+                                Icon(
+                                    Icons.Default.PointOfSale,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            },
+                            label = {
+                                Text("Historial & Reportes Ventas")
+                            },
                             selected = false,
                             onClick = {
                                 scope.launch { drawerState.close() }
@@ -226,11 +295,20 @@ fun MainAppLayout(
                         )
                     }
 
-                    // Drawer Option: Usuarios Activos & Horarios
+                    // Usuarios activos
                     if (puedeVerReportesVentas) {
+
                         NavigationDrawerItem(
-                            icon = { Icon(Icons.Default.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                            label = { Text("Usuarios Activos") },
+                            icon = {
+                                Icon(
+                                    Icons.Default.Schedule,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            },
+                            label = {
+                                Text("Usuarios Activos")
+                            },
                             selected = false,
                             onClick = {
                                 scope.launch { drawerState.close() }
@@ -239,11 +317,20 @@ fun MainAppLayout(
                         )
                     }
 
-                    // Drawer Option EXCLUSIVA PARA TI (`blorex`): Gestión de Usuarios
+                    // Gestión de usuarios exclusiva para TI
                     if (esTI) {
+
                         NavigationDrawerItem(
-                            icon = { Icon(Icons.Default.Group, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary) },
-                            label = { Text("Gestión de Usuarios (Solo TI)") },
+                            icon = {
+                                Icon(
+                                    Icons.Default.Group,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.tertiary
+                                )
+                            },
+                            label = {
+                                Text("Gestión de Usuarios (Solo TI)")
+                            },
                             selected = false,
                             onClick = {
                                 scope.launch { drawerState.close() }
@@ -251,20 +338,31 @@ fun MainAppLayout(
                             }
                         )
 
-                        // Drawer Option EXCLUSIVA PARA TI: Buzón de Solicitudes de Trabajadores
+                        // Buzón de solicitudes
                         NavigationDrawerItem(
                             icon = {
+
                                 BadgedBox(
                                     badge = {
+
                                         if (conteoSolicitudesPendientes > 0) {
-                                            Badge { Text("$conteoSolicitudesPendientes") }
+                                            Badge {
+                                                Text("$conteoSolicitudesPendientes")
+                                            }
                                         }
                                     }
                                 ) {
-                                    Icon(Icons.Default.Inbox, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+
+                                    Icon(
+                                        Icons.Default.Inbox,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.tertiary
+                                    )
                                 }
                             },
-                            label = { Text("Solicitudes de Trabajadores") },
+                            label = {
+                                Text("Solicitudes de Trabajadores")
+                            },
                             selected = false,
                             onClick = {
                                 scope.launch { drawerState.close() }
@@ -273,9 +371,17 @@ fun MainAppLayout(
                         )
                     }
 
+                    // Mi perfil
                     NavigationDrawerItem(
-                        icon = { Icon(Icons.Default.Person, contentDescription = null) },
-                        label = { Text("Mi Perfil") },
+                        icon = {
+                            Icon(
+                                Icons.Default.Person,
+                                contentDescription = null
+                            )
+                        },
+                        label = {
+                            Text("Mi Perfil")
+                        },
                         selected = false,
                         onClick = {
                             scope.launch { drawerState.close() }
@@ -283,9 +389,17 @@ fun MainAppLayout(
                         }
                     )
 
+                    // Ajustes
                     NavigationDrawerItem(
-                        icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                        label = { Text("Ajustes de la App") },
+                        icon = {
+                            Icon(
+                                Icons.Default.Settings,
+                                contentDescription = null
+                            )
+                        },
+                        label = {
+                            Text("Ajustes de la App")
+                        },
                         selected = false,
                         onClick = {
                             scope.launch { drawerState.close() }
@@ -299,9 +413,21 @@ fun MainAppLayout(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
+                    // Cerrar sesión
                     NavigationDrawerItem(
-                        icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                        label = { Text("Cerrar Sesión", color = MaterialTheme.colorScheme.error) },
+                        icon = {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        label = {
+                            Text(
+                                "Cerrar Sesión",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        },
                         selected = false,
                         onClick = {
                             scope.launch { drawerState.close() }
@@ -311,103 +437,240 @@ fun MainAppLayout(
                 }
             }
         }
+
     ) {
+
         Box(modifier = Modifier.fillMaxSize()) {
+
             Scaffold(
+
                 topBar = {
+
                     TopAppBar(
+
                         title = {
+
                             Text(
                                 text = when (selectedTab) {
+
                                     0 -> "Catálogo de Productos"
+
                                     1 -> "Productos Guardados / Favoritos"
+
                                     2 -> "Carrito de Compras"
-                                    3 -> if (esVendedor) "AppCappuCare" else "Inventario de Productos"
+
+                                    3 -> if (esVendedor) {
+                                        "AppCappuCare"
+                                    } else {
+                                        "Inventario de Productos"
+                                    }
+
+                                    4 -> "Escáner QR"
+
                                     else -> "AppCappuCare"
                                 },
                                 fontWeight = FontWeight.Bold
                             )
                         },
+
                         navigationIcon = {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+
+                            IconButton(
+                                onClick = {
+                                    scope.launch { drawerState.open() }
+                                }
+                            ) {
+
                                 Icon(
                                     imageVector = Icons.Default.Menu,
-                                    contentDescription = "Menú de Opciones (3 barras)"
+                                    contentDescription = "Menú de Opciones"
                                 )
                             }
                         },
+
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
                         )
                     )
                 },
+
+                // Menú inferior
                 bottomBar = {
+
                     NavigationBar {
+
+                        // Catálogo
                         NavigationBarItem(
                             selected = selectedTab == 0,
-                            onClick = { selectedTab = 0 },
-                            icon = { Icon(Icons.Default.Storefront, contentDescription = "Catálogo") },
-                            label = { Text("Catálogo") }
+                            onClick = {
+                                selectedTab = 0
+                            },
+                            icon = {
+                                Icon(
+                                    Icons.Default.Storefront,
+                                    contentDescription = "Catálogo"
+                                )
+                            },
+                            label = {
+                                Text("Catálogo")
+                            }
                         )
+
+                        // Favoritos
                         NavigationBarItem(
                             selected = selectedTab == 1,
-                            onClick = { selectedTab = 1 },
-                            icon = { Icon(Icons.Default.Favorite, contentDescription = "Favoritos") },
-                            label = { Text("Favoritos") }
+                            onClick = {
+                                selectedTab = 1
+                            },
+                            icon = {
+                                Icon(
+                                    Icons.Default.Favorite,
+                                    contentDescription = "Favoritos"
+                                )
+                            },
+                            label = {
+                                Text("Favoritos")
+                            }
                         )
+
+                        // Carrito
                         NavigationBarItem(
                             selected = selectedTab == 2,
-                            onClick = { selectedTab = 2 },
+                            onClick = {
+                                selectedTab = 2
+                            },
                             icon = {
+
                                 BadgedBox(
                                     badge = {
+
                                         if (totalItemsEnCarrito > 0) {
-                                            Badge { Text("$totalItemsEnCarrito") }
+                                            Badge {
+                                                Text("$totalItemsEnCarrito")
+                                            }
                                         }
                                     }
                                 ) {
-                                    Icon(Icons.Default.ShoppingCart, contentDescription = "Carrito")
+
+                                    Icon(
+                                        Icons.Default.ShoppingCart,
+                                        contentDescription = "Carrito"
+                                    )
                                 }
                             },
-                            label = { Text("Carrito") }
+                            label = {
+                                Text("Carrito")
+                            }
                         )
 
-                        // Pestaña Inventario visible SOLO para TI, Admin y Gerente (Oculta para Vendedor)
+                        // Inventario
                         if (!esVendedor) {
+
                             NavigationBarItem(
                                 selected = selectedTab == 3,
-                                onClick = { selectedTab = 3 },
-                                icon = { Icon(Icons.Default.Inventory, contentDescription = "Inventario") },
-                                label = { Text("Inventario") }
+                                onClick = {
+                                    selectedTab = 3
+                                },
+                                icon = {
+                                    Icon(
+                                        Icons.Default.Inventory,
+                                        contentDescription = "Inventario"
+                                    )
+                                },
+                                label = {
+                                    Text("Inventario")
+                                }
+                            )
+                        }
+
+                        // NUEVO: Escáner QR
+                        NavigationBarItem(
+                            selected = selectedTab == 4,
+                            onClick = {
+                                selectedTab = 4
+                            },
+                            icon = {
+                                Icon(
+                                    Icons.Default.QrCodeScanner,
+                                    contentDescription = "Escáner QR"
+                                )
+                            },
+                            label = {
+                                Text("Escáner QR")
+                            }
+                        )
+                    }
+                }
+
+            ) { innerPadding ->
+
+                when (selectedTab) {
+
+                    0 -> CatalogoShowcaseScreen(
+                        modifier = Modifier.padding(innerPadding),
+                        ventaViewModel = ventaViewModel
+                    )
+
+                    1 -> FavoritosScreen(
+                        modifier = Modifier.padding(innerPadding),
+                        ventaViewModel = ventaViewModel
+                    )
+
+                    2 -> CarritoScreen(
+                        modifier = Modifier.padding(innerPadding),
+                        ventaViewModel = ventaViewModel,
+                        usuario = usuario
+                    )
+
+                    3 -> {
+
+                        if (!esVendedor) {
+
+                            ProductosScreen(
+                                modifier = Modifier.padding(innerPadding)
+                            )
+
+                        } else {
+
+                            CatalogoShowcaseScreen(
+                                modifier = Modifier.padding(innerPadding),
+                                ventaViewModel = ventaViewModel
                             )
                         }
                     }
-                }
-            ) { innerPadding ->
-                when (selectedTab) {
-                    0 -> CatalogoShowcaseScreen(modifier = Modifier.padding(innerPadding), ventaViewModel = ventaViewModel)
-                    1 -> FavoritosScreen(modifier = Modifier.padding(innerPadding), ventaViewModel = ventaViewModel)
-                    2 -> CarritoScreen(modifier = Modifier.padding(innerPadding), ventaViewModel = ventaViewModel, usuario = usuario)
-                    3 -> if (!esVendedor) ProductosScreen(modifier = Modifier.padding(innerPadding)) else CatalogoShowcaseScreen(modifier = Modifier.padding(innerPadding), ventaViewModel = ventaViewModel)
+
+                    // NUEVO: Pantalla del escáner QR
+                    4 -> EscanearQrScreen(
+                        modifier = Modifier.padding(innerPadding)
+                    )
                 }
             }
 
-            // Draggable Red Floating Alert Bubble Overlay
+            // Burbuja flotante de alertas
             if (mostrarBurbujaFlotante && totalAlertas > 0) {
+
                 BurbujaAlertaFlotante(
                     totalAlertas = totalAlertas,
-                    onAbrirAlertas = { mostrarAlertasDesdeDrawer = true },
-                    onDescartarBurbuja = { mostrarBurbujaFlotante = false }
+                    onAbrirAlertas = {
+                        mostrarAlertasDesdeDrawer = true
+                    },
+                    onDescartarBurbuja = {
+                        mostrarBurbujaFlotante = false
+                    }
                 )
             }
         }
     }
 
-    // Modal para Alertas de Stock
+    // Modal de alertas de stock
     if (mostrarAlertasDesdeDrawer) {
+
         Dialog(
-            onDismissRequest = { mostrarAlertasDesdeDrawer = false }
+            onDismissRequest = {
+                mostrarAlertasDesdeDrawer = false
+            }
         ) {
+
             Surface(
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -415,19 +678,33 @@ fun MainAppLayout(
                     .fillMaxWidth(0.95f)
                     .fillMaxHeight(0.85f)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+
                         Text(
                             text = "Alertas de Stock",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        IconButton(onClick = { mostrarAlertasDesdeDrawer = false }) {
-                            Icon(Icons.Default.Notifications, contentDescription = "Cerrar")
+
+                        IconButton(
+                            onClick = {
+                                mostrarAlertasDesdeDrawer = false
+                            }
+                        ) {
+
+                            Icon(
+                                Icons.Default.Notifications,
+                                contentDescription = "Cerrar"
+                            )
                         }
                     }
 
@@ -439,94 +716,136 @@ fun MainAppLayout(
         }
     }
 
-    // Modal EXCLUSIVO TI (`blorex`): Modificación de App (Logo, Portadas y Gamas de Colores)
+    // Modificación de aplicación exclusiva para TI
     if (mostrarModificacionApp && esTI) {
+
         ModificacionAppDialog(
-            onDismiss = { mostrarModificacionApp = false }
+            onDismiss = {
+                mostrarModificacionApp = false
+            }
         )
     }
 
-    // Modal para Historial y Reportes de Ventas
+    // Historial y reportes de ventas
     if (mostrarHistorialVentas && puedeVerReportesVentas) {
+
         HistorialVentasDialog(
             usuarioLogueado = usuario,
-            onDismiss = { mostrarHistorialVentas = false }
+            onDismiss = {
+                mostrarHistorialVentas = false
+            }
         )
     }
 
-    // Modal para Usuarios Activos & Horarios
+    // Usuarios activos
     if (mostrarUsuariosActivos) {
+
         UsuariosActivosDialog(
-            onDismiss = { mostrarUsuariosActivos = false }
+            onDismiss = {
+                mostrarUsuariosActivos = false
+            }
         )
     }
 
-    // Modal EXCLUSIVO TI (blorex): Gestión de Usuarios
+    // Gestión de usuarios
     if (mostrarGestionUsuarios && esTI) {
+
         GestionUsuariosDialog(
-            onDismiss = { mostrarGestionUsuarios = false }
+            onDismiss = {
+                mostrarGestionUsuarios = false
+            }
         )
     }
 
-    // Modal EXCLUSIVO TI (blorex): Buzón de Solicitudes de Trabajadores
+    // Buzón de solicitudes
     if (mostrarBuzonSolicitudes && esTI) {
+
         BuzonSolicitudesDialog(
-            onDismiss = { mostrarBuzonSolicitudes = false }
+            onDismiss = {
+                mostrarBuzonSolicitudes = false
+            }
         )
     }
 
-    // Modal para Perfil del Usuario
+    // Perfil del usuario
     if (mostrarPerfilDialog) {
+
         PerfilUsuarioDialog(
             usuario = usuario,
             usuarioLogueado = usuario,
-            onDismiss = { mostrarPerfilDialog = false }
+            onDismiss = {
+                mostrarPerfilDialog = false
+            }
         )
     }
 
-    // Modal dialog for Ajustes with Theme, Sync Mode and TI App Customization
+    // Ajustes de la aplicación
     if (mostrarAjustesDialog) {
+
         AlertDialog(
-            onDismissRequest = { mostrarAjustesDialog = false },
-            title = { Text("Ajustes de la Aplicación") },
+
+            onDismissRequest = {
+                mostrarAjustesDialog = false
+            },
+
+            title = {
+                Text("Ajustes de la Aplicación")
+            },
+
             text = {
+
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+
                         Text("Notificaciones de stock bajo")
+
                         Switch(
                             checked = authViewModel.notificacionesActivas,
-                            onCheckedChange = { authViewModel.notificacionesActivas = it }
+                            onCheckedChange = {
+                                authViewModel.notificacionesActivas = it
+                            }
                         )
                     }
 
                     HorizontalDivider()
 
-                    // Opción para la personalización de TI en Ajustes
+                    // Personalización exclusiva para TI
                     if (esTI) {
+
                         Button(
                             onClick = {
                                 mostrarAjustesDialog = false
                                 mostrarModificacionApp = true
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.tertiary
+                            )
                         ) {
-                            Icon(Icons.Default.Palette, contentDescription = null, modifier = Modifier.size(18.dp))
+
+                            Icon(
+                                Icons.Default.Palette,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+
                             Spacer(modifier = Modifier.width(8.dp))
+
                             Text("Modificación de App (Logo, Portadas y Colores)")
                         }
 
                         HorizontalDivider()
                     }
 
-                    // Modo de Conexión: Offline Room vs Online Backend
+                    // Modo de conexión
                     Text(
                         text = "Modo de Base de Datos / Conexión:",
                         fontWeight = FontWeight.Bold,
@@ -534,99 +853,166 @@ fun MainAppLayout(
                     )
 
                     val opcionesModo = listOf(
-                        ModoConexion.OFFLINE_ROOM to "Modo Offline (Room / SQLite Local)",
-                        ModoConexion.ONLINE_BACKEND to "Modo Online (Sincronización Backend)"
+                        ModoConexion.OFFLINE_ROOM to
+                                "Modo Offline (Room / SQLite Local)",
+
+                        ModoConexion.ONLINE_BACKEND to
+                                "Modo Online (Sincronización Backend)"
                     )
 
                     opcionesModo.forEach { (modo, label) ->
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .selectable(
-                                    selected = (SyncBackendRepository.modoConexion == modo),
-                                    onClick = { SyncBackendRepository.modoConexion = modo },
+                                    selected = SyncBackendRepository.modoConexion == modo,
+                                    onClick = {
+                                        SyncBackendRepository.modoConexion = modo
+                                    },
                                     role = Role.RadioButton
                                 )
                                 .padding(vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+
                             RadioButton(
-                                selected = (SyncBackendRepository.modoConexion == modo),
+                                selected = SyncBackendRepository.modoConexion == modo,
                                 onClick = null
                             )
+
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = label, style = MaterialTheme.typography.bodySmall)
+
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                     }
 
-                    if (SyncBackendRepository.modoConexion == ModoConexion.ONLINE_BACKEND) {
+                    if (
+                        SyncBackendRepository.modoConexion ==
+                        ModoConexion.ONLINE_BACKEND
+                    ) {
+
                         OutlinedTextField(
                             value = SyncBackendRepository.servidorUrlInput,
-                            onValueChange = { SyncBackendRepository.servidorUrlInput = it },
-                            label = { Text("URL Servidor Backend") },
+                            onValueChange = {
+                                SyncBackendRepository.servidorUrlInput = it
+                            },
+                            label = {
+                                Text("URL Servidor Backend")
+                            },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
 
                         Button(
-                            onClick = { SyncBackendRepository.sincronizarConServidorBackend(context, scope) },
+                            onClick = {
+                                SyncBackendRepository.sincronizarConServidorBackend(
+                                    context,
+                                    scope
+                                )
+                            },
                             enabled = !SyncBackendRepository.estaSincronizando,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp))
+
+                            Icon(
+                                Icons.Default.CloudSync,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (SyncBackendRepository.estaSincronizando) "Transmitiendo datos..." else "Sincronizar con Servidor Backend")
+
+                            Text(
+                                if (SyncBackendRepository.estaSincronizando) {
+                                    "Transmitiendo datos..."
+                                } else {
+                                    "Sincronizar con Servidor Backend"
+                                }
+                            )
                         }
 
                         SyncBackendRepository.ultimoMensajeSincronizacion?.let { msg ->
-                            Text(text = msg, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+
+                            Text(
+                                text = msg,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
 
                     HorizontalDivider()
 
-                    // Modo de Tema (Independiente de los colores)
+                    // Apariencia y tema
                     Text(
-                        text = "Apariencia y Modo de Pantalla (Independiente):",
+                        text = "Apariencia y Modo de Pantalla:",
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.bodyMedium
                     )
 
                     val opcionesTema = listOf(
                         OpcionTema.SISTEMA to "Definida por el dispositivo",
-                        OpcionTema.CLARO to "Pantalla Clara (Light Theme)",
-                        OpcionTema.OSCURO to "Pantalla Oscura (Dark Theme)"
+                        OpcionTema.CLARO to "Pantalla Clara",
+                        OpcionTema.OSCURO to "Pantalla Oscura"
                     )
 
                     opcionesTema.forEach { (opcion, label) ->
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .selectable(
-                                    selected = (authViewModel.opcionTema == opcion),
-                                    onClick = { authViewModel.opcionTema = opcion },
+                                    selected = authViewModel.opcionTema == opcion,
+                                    onClick = {
+                                        authViewModel.opcionTema = opcion
+                                    },
                                     role = Role.RadioButton
                                 )
                                 .padding(vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+
                             RadioButton(
-                                selected = (authViewModel.opcionTema == opcion),
+                                selected = authViewModel.opcionTema == opcion,
                                 onClick = null
                             )
+
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = label, style = MaterialTheme.typography.bodySmall)
+
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                     }
 
                     HorizontalDivider()
 
-                    Text("Versión de AppCappuCare: 1.0.0", style = MaterialTheme.typography.bodySmall)
-                    Text("Base de datos: Room / SQLite Local", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "Versión de AppCappuCare: 1.0.0",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Text(
+                        "Base de datos: Room / SQLite Local",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             },
+
             confirmButton = {
-                Button(onClick = { mostrarAjustesDialog = false }) {
+
+                Button(
+                    onClick = {
+                        mostrarAjustesDialog = false
+                    }
+                ) {
+
                     Text("Guardar")
                 }
             }
