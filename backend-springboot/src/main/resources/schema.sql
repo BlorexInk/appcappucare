@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS medicamentos (codigo TEXT PRIMARY KEY,nombre TEXT NOT NULL,principioActivo TEXT,concentracion TEXT,laboratorio TEXT,stock INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS productos (codigo TEXT PRIMARY KEY,nombre TEXT NOT NULL,descripcion TEXT,valor REAL NOT NULL,cantidadDisponible INTEGER NOT NULL,unidadMedida TEXT NOT NULL,nivelMinimo INTEGER NOT NULL,estadoStock TEXT NOT NULL,imagenes TEXT);
+CREATE TABLE IF NOT EXISTS usuarios (username TEXT PRIMARY KEY,password TEXT NOT NULL,nombreCompleto TEXT NOT NULL,rol TEXT NOT NULL,categoriaCargo TEXT NOT NULL,email TEXT NOT NULL,telefono TEXT,direccion TEXT,ubicacionBodega TEXT,fotoPerfilUrl TEXT,fechaRegistro TEXT,horaInicioSesion TEXT);
+CREATE TABLE IF NOT EXISTS configuracion (clave TEXT PRIMARY KEY,valor TEXT);

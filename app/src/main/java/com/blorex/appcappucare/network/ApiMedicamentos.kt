@@ -8,7 +8,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Path
 
-// Endpoints para consultar medicamentos en Node.js
+// Endpoints para consultar medicamentos en Spring Boot
 interface ApiMedicamentos {
 
     // Buscar medicamento mediante el código QR
@@ -22,7 +22,7 @@ interface ApiMedicamentos {
     suspend fun obtenerMedicamentos(): RespuestaListaMedicamentos
 }
 
-// Configuración de conexión con Node.js
+// Configuración de conexión con Spring Boot
 object ClienteMedicamentos {
 
     // Dirección del backend desde el emulador Android

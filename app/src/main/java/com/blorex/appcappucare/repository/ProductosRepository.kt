@@ -9,6 +9,9 @@ import com.blorex.appcappucare.room.entities.ProductoEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.blorex.appcappucare.repository.sync.HttpSyncClient
+import com.blorex.appcappucare.repository.sync.ModoConexion
+import com.blorex.appcappucare.repository.sync.SyncBackendRepository
 
 /**
  * Repositorio principal de productos conectado con la base de datos local Jetpack Room.
@@ -186,16 +189,44 @@ object ProductosRepository {
      * @param codigo Código del producto a eliminar.
      * @return `true` si se eliminó correctamente; `false` de lo contrario.
      */
+
     fun eliminarProducto(codigo: String): Boolean {
+        val eliminado = productos.removeIf {
+            it.codigo.equals(codigo, ignoreCase = true)
+        }
+
+        if (!eliminado) return false
+
         val db = roomDatabase
-        if (db != null) {
-            CoroutineScope(Dispatchers.IO).launch {
-                db.productoDao().eliminarPorCodigo(codigo)
+
+        CoroutineScope(Dispatchers.IO).launch {
+            db?.productoDao()?.eliminarPorCodigo(codigo)
+            eliminarProductoRemoto(codigo)
+        }
+
+        return true
+    }
+
+
+    private fun eliminarProductoRemoto(codigo: String) {
+        if (SyncBackendRepository.modoConexion != ModoConexion.ONLINE_BACKEND) {
+            return
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            val eliminado = HttpSyncClient.eliminarProductoServidor(
+                baseUrl = SyncBackendRepository.servidorUrlInput
+                    .trim()
+                    .removeSuffix("/"),
+                codigo = codigo
+            )
+
+            if (!eliminado) {
+                android.util.Log.e(
+                    "CappuCareSync",
+                    "No se pudo eliminar el producto $codigo del servidor"
+                )
             }
-            productos.removeIf { it.codigo.equals(codigo, ignoreCase = true) }
-            return true
-        } else {
-            return productos.removeIf { it.codigo.equals(codigo, ignoreCase = true) }
         }
     }
 }

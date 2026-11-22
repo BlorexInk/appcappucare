@@ -37,6 +37,32 @@ data class ResultadoSync(
  */
 object HttpSyncClient {
 
+    suspend fun eliminarProductoServidor(
+        baseUrl: String,
+        codigo: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val url = URL(
+                "${baseUrl.trimEnd('/')}/api/productos/${java.net.URLEncoder.encode(codigo, "UTF-8")}"
+            )
+
+            val conexion = url.openConnection() as HttpURLConnection
+
+            try {
+                conexion.requestMethod = "DELETE"
+                conexion.connectTimeout = 10000
+                conexion.readTimeout = 10000
+
+                conexion.responseCode in 200..299
+            } finally {
+                conexion.disconnect()
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+
     /**
      * Procesa la subida de fotos de la galería al servidor Backend y sincroniza inventario, usuarios y configuración global de marca.
      *
